@@ -11,28 +11,37 @@ export interface SourceRecord {
 export function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim().normalize('NFKC').replace(/\p{Cc}/gu, ' ').slice(0, 2000) : null;
 }
+// Only bounded language/pagination selectors have a known non-credential purpose.
+// Unknown parameters and fragments are discarded, including OAuth fragment tokens.
+export function sanitizeHttpUrl(url: URL): string {
+  url.username = ''; url.password = ''; url.hash = '';
+  for (const [key, value] of [...url.searchParams.entries()]) {
+    const safe = key === 'page' ? /^[1-9]\d{0,5}$/.test(value)
+      : ['lang', 'locale'].includes(key) && /^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})?$/i.test(value);
+    if (!safe) url.searchParams.delete(key);
+  }
+  return url.href;
+}
 export function websiteUrl(value: unknown): string | null {
   const input = text(value);
   if (!input) return null;
   try {
     const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(input) ? input : 'https://' + input);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !url.hostname.includes('.')) return null;
-    return url.href;
+    return sanitizeHttpUrl(url);
   } catch { return null; }
 }
-const privateField = /^(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret|service[_-]?role[_-]?key)$/i;
+const privateField = /^(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret|service[_-]?role[_-]?key|token|key|auth|jwt|credential|credentials|session[_-]?(?:id|token)|client[_-]?secret|signature)$/i;
 export function sanitizeMetadata(record: Record<string, unknown>): Record<string, unknown> {
   function clean(value: unknown, depth: number): unknown {
     if (depth > 12) return null;
     if (Array.isArray(value)) return value.map(item => clean(item, depth + 1));
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !privateField.test(key)).map(([key, item]) => [key, clean(item, depth + 1)]));
-    if (typeof value === 'string' && /^https?:\/\//i.test(value)) {
+    if (typeof value === 'string' && /^(?:https?:\/\/|[^\s/?#]+\.[^\s/?#]+[/?#]|[^\s/?#]+:[^\s/?#]*@[^\s/?#]+\.[^\s/?#]+$)/i.test(value.trim())) {
       try {
-        const url = new URL(value);
-        url.username = ''; url.password = '';
-        for (const key of [...url.searchParams.keys()]) if (privateField.test(key)) url.searchParams.delete(key);
-        return url.href;
-      } catch { return value; }
+        const url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : 'https://' + value.trim());
+        return sanitizeHttpUrl(url);
+      } catch { return null; }
     }
     return value;
   }

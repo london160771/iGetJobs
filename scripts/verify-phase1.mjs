@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from '../apps/api/dist/app.js';
 import { readServerEnv } from '../apps/api/dist/env.js';
 import { createServerSupabase } from '../apps/api/dist/supabase.js';
-import { createDiscoveryService } from '../apps/api/dist/discovery/service.js';
+import { createDiscoveryService, DiscoveryService } from '../apps/api/dist/discovery/service.js';
+import { SupabaseLeadRepository } from '../apps/api/dist/discovery/repository.js';
+import { ProviderGuard } from '../apps/api/dist/discovery/usage.js';
+import { RequestError } from '../apps/api/dist/discovery/errors.js';
 
 config({ path: fileURLToPath(new URL('../.env', import.meta.url)), quiet: true });
 config({ path: fileURLToPath(new URL('../apps/api/.env', import.meta.url)), quiet: true });
@@ -57,7 +60,7 @@ try {
   const marker = randomUUID();
   const name = 'Disposable Phase 1 ' + marker;
   const domain = 'verification-' + marker + '.example';
-  const csv = 'businessName,country,city,address,website,extra\r\n' + name + ',GB,Bath,"1 Test Street\nBath",' + domain + ',original\r\n';
+  const csv = 'businessName,country,city,address,website,extra\r\n' + name + ',GB,Bath,"1 Test Street\nBath",' + domain + '/?token=disposable-credential-marker&lang=en,original\r\n';
   const imported = await request('/api/discovery/import', a, { csv, filename: 'disposable-verification.csv' });
   check(imported.status === 200 && imported.data.rows.length === 1 && imported.data.rows[0].duplicate.kind === 'new', 'CSV preview normalizes a quoted multiline record');
   const row = imported.data.rows[0];
@@ -69,6 +72,7 @@ try {
   const persisted = await a.client.from('leads').select('*').eq('id', row.lead.id).single();
   check(!persisted.error && persisted.data.owner_id === a.userId && persisted.data.score === null && persisted.data.classification === null
     && persisted.data.domain === domain && persisted.data.provenance[0].metadata.fields.extra === 'original', 'Remote persistence retains normalized fields and provenance without mass assignment');
+  check(persisted.data.website === 'https://' + domain + '/?lang=en' && !JSON.stringify(persisted.data).includes('disposable-credential-marker'), 'Canonical and provenance URLs exclude credential query values remotely');
   check((await request('/api/leads', a)).data.leads.some(lead => lead.id === row.lead.id)
     && !(await request('/api/leads', b)).data.leads.some(lead => lead.id === row.lead.id), 'Reloaded API leads remain owner scoped');
   const foreignRead = await b.client.from('leads').select('id').eq('id', row.lead.id);
@@ -84,6 +88,29 @@ try {
   const linked = await request('/api/discovery/save', a, { previewId: linkedPreview.data.id, selections: [{ id: linkRow.lead.id, action: 'link' }] });
   const reread = await a.client.from('leads').select('business_name, provenance').eq('id', row.lead.id).single();
   check(linked.data.results[0].status === 'linked' && reread.data.business_name === name && reread.data.provenance.length === 2, 'Explicit source linking preserves existing fields and both metadata records');
+  const repeatedPreview = await request('/api/discovery/import', a, { csv: csv.replace('original', 'additional'), filename: 'additional-source.csv' });
+  const repeatedLink = await request('/api/discovery/save', a, { previewId: repeatedPreview.data.id, selections: [{ id: repeatedPreview.data.rows[0].lead.id, action: 'link' }] });
+  const repeatedRead = await a.client.from('leads').select('provenance').eq('id', row.lead.id).single();
+  check(repeatedLink.data.results[0].status === 'linked' && !repeatedRead.error && repeatedRead.data.provenance.length === 2, 'Identical source linking after remote JSONB round trip does not grow provenance');
+
+  // Simulate only the lost acknowledgement; use real authenticated persistence/RLS.
+  let insertCalls = 0;
+  const faultService = new DiscoveryService(process.env, (ownerId, token) => {
+    const repository = new SupabaseLeadRepository(createServerSupabase(settings, token), ownerId);
+    return {
+      identities: () => repository.identities(), list: () => repository.list(), findById: id => repository.findById(id), link: (id, provenance) => repository.link(id, provenance),
+      insert: async lead => { insertCalls++; await repository.insert(lead); throw new RequestError(503, 'Simulated lost acknowledgement'); }
+    };
+  }, new ProviderGuard({ load: async () => ({}), save: async () => {} }));
+  const faultPreview = await faultService.importCsv(a.userId, a.token, { csv: 'name\nDisposable retry ' + marker });
+  const retryId = faultPreview.rows[0].lead.id;
+  created.push({ client: a.client, id: retryId });
+  const faultInput = { previewId: faultPreview.id, selections: [{ id: retryId, action: 'save' }] };
+  check((await faultService.save(a.userId, a.token, faultInput)).results[0].status === 'failed', 'Lost acknowledgement is simulated after a real owner insert');
+  const reconciled = await faultService.save(a.userId, a.token, faultInput);
+  check(reconciled.results[0].status === 'saved' && reconciled.results[0].leadId === retryId && insertCalls === 1, 'Retry reconciles the remotely committed lead by owner and preview ID without reinserting');
+  const foreignRepository = new SupabaseLeadRepository(createServerSupabase(settings, b.token), b.userId);
+  check(await foreignRepository.findById(retryId) === null, 'Remote reconciliation lookup cannot read another owner record');
   const branchPreview = await request('/api/discovery/import', a, { csv: csv.replace(name, name + ' branch').replace('1 Test Street', '2 Test Street') });
   const branch = branchPreview.data.rows[0];
   check(branch.duplicate.kind === 'possible' && !branch.duplicate.canLink, 'Shared domains with conflicting business details require manual review');

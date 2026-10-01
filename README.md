@@ -43,10 +43,10 @@ Use a confirmed email/password account at `/login`. All workspace routes require
 1. Open Search; choose country, city (add state/region when ambiguous), niche, and source.
 2. Find leads or upload a CSV to create a preview. Nothing is saved automatically.
 3. Review location, contact information, source notes, and duplicate evidence. A missing source website is not an audit or a classification.
-4. Select up to 50 results and save. Failures are reported per row; retrying the same preview does not repeat completed saves.
+4. Select up to 50 results and save. Failures are reported per row; retrying the same preview does not repeat completed saves. Owner-scoped lookup by the server-created preview lead ID also reconciles an insert that committed before its response was lost; retry returns the existing lead without overwriting it.
 5. Open Saved leads to reload the latest 100 records from Supabase. This read view verifies collection; lead management, filters, detail views, auditing, and outreach remain later phases.
 
-Each source has an isolated adapter. Normalization trims text, normalizes domains/HTTP(S) URLs, validates E.164 phones using the country, normalizes email/country, and bounds ratings/review counts. Invalid contacts become null with visible warnings, while original source fields remain in provenance. Source/sourceId, raw OSM tags, SerpAPI record fields, and CSV columns/row numbers are retained. Credential-shaped metadata fields/URL parameters are removed. Oversized metadata records are skipped with a source note.
+Each source has an isolated adapter. Normalization trims text, normalizes domains/HTTP(S) URLs, validates E.164 phones using the country, normalizes email/country, and bounds ratings/review counts. Invalid contacts become null with visible warnings, while original source fields remain in provenance. Source/sourceId, raw OSM tags, SerpAPI record fields, and CSV columns/row numbers are retained, subject to credential sanitization. Website/social and metadata URLs share sanitization: userinfo is rejected in canonical contacts, metadata userinfo is stripped, fragments and unknown query parameters are removed. Only bounded `page` numbers and validated `lang`/`locale` selectors survive because they select pagination or language without accepting arbitrary secret values. Credential-shaped metadata fields are removed. Oversized metadata records are skipped with a source note.
 
 Duplicate evidence checks domain, phone, then normalized business name + address; source identifiers provide additional evidence. A shared domain or phone alone is uncertain. Conflicting details and multiple matches require review. Duplicates default to Skip. An exact, single saved match can receive source metadata only after the user chooses it; existing business/contact fields are preserved. The user may explicitly keep a reviewed match separately. No uncertain records are silently merged.
 
@@ -70,7 +70,17 @@ Copy `apps/api/.env.example` to `apps/api/.env` only when needed; keep all crede
 
 One live provider request runs at a time; identical in-flight requests share their result. Failed attempts are charged locally before network I/O. Provider responses/timeouts are bounded. Usage counts persist in ignored `.local/provider-usage.json`; failed/corrupt storage blocks discovery. Keep this directory writable and durable, and **do not delete it to reset quotas**.
 
-Run one API process for this personal workspace. The quota file, previews, and locks do not coordinate multiple processes/replicas. Distributed operation is outside the current architecture. Duplicate checks inspect at most 2,000 owner records and fail clearly above that limit. Source history is limited to 100 provenance records per lead; simultaneous metadata updates use an optimistic timestamp check.
+Run one API process for this personal workspace. The quota file, previews, and locks do not coordinate multiple processes/replicas. Distributed operation is outside the current architecture. Duplicate checks inspect at most 2,000 owner records and fail clearly above that limit. Source history is limited to 100 provenance records per lead; simultaneous metadata updates use an optimistic timestamp check. Provenance equality recursively sorts object keys, retains array order, and preserves genuinely different values. Repeated links remain idempotent after PostgreSQL JSONB reorders keys.
+
+### Phase 2 website-fetch safety hook
+
+`apps/api/src/website-safety.ts` prepares safety helpers only; no audit, classification, scoring, or website HTTP fetching is implemented.
+
+- `collectWebsiteEvidence` exposes sanitized canonical website data and supported CSV/OSM/SerpAPI website fields from all linked provenance, with their source IDs and field paths. It excludes map/social URLs and does not pick a winner or modify the lead. Future audits must resolve conflicting evidence explicitly; a null canonical website is not proof that no website exists.
+- `validateWebsiteDestination` permits HTTP(S) on standard web ports, rejects credentials/internal hostnames, resolves all addresses with a bounded wait, and fails closed if any answer is invalid or non-public. It excludes loopback, private/shared/link-local/multicast/reserved IPv4, metadata/platform endpoints, and non-global or special-purpose IPv6. IP shorthand and mapped forms cannot bypass checks. Tests use injected DNS results; they never fetch the blocked targets.
+- **Mandatory before any Phase 2 website request:** pin a returned validated address in the transport while preserving the original Host/TLS hostname. Do not validate then call ordinary `fetch(url)`, which re-resolves DNS and permits rebinding. Disable automatic redirects; resolve and validate every redirect hop, pin its connection, and bound redirects/time/response size. Retest redirect-to-private and DNS-rebinding cases when implementing that transport. These helpers do not constitute a safe fetcher on their own.
+
+Conservative address policy references: [IANA IPv4 special-purpose registry](https://www.iana.org/assignments/iana-ipv4-special-registry/), [IANA IPv6 special-purpose registry](https://www.iana.org/assignments/iana-ipv6-special-registry/). Some special-purpose public exceptions are deliberately excluded.
 
 Backend configuration:
 

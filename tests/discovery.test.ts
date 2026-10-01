@@ -32,12 +32,12 @@ test('lead normalization preserves provenance, normalizes contacts, and leaves a
   assert.equal(value.lead.email, 'hello@example.com');
   assert.equal(value.lead.reviewCount, 1234);
   assert.equal(value.lead.rating, 4.5);
-  assert.deepEqual(value.lead.provenance[0]?.metadata, { arbitrary: { field: 'preserved' }, url: 'https://example.com/?record=1' });
+  assert.deepEqual(value.lead.provenance[0]?.metadata, { arbitrary: { field: 'preserved' }, url: 'https://example.com/' });
   for (const key of ['audit', 'classification', 'score', 'outreachDraft'] as const) assert.equal(value.lead[key], null);
   const invalid = normalizeLead({ businessName: 'Unsafe contact', website: 'javascript:alert(1)', phone: '123', email: 'bad', rating: 'Infinity', reviewCount: '-1', sourceId: null, metadata: {} }, 'CSV');
   assert.equal(invalid.lead.website, null); assert.equal(invalid.lead.phone, null); assert.equal(invalid.lead.email, null); assert.equal(invalid.lead.rating, null); assert.equal(invalid.lead.reviewCount, null);
   assert.equal(invalid.warnings.length, 3);
-  assert.deepEqual(sanitizeMetadata({ auth: { password: 'private', allowed: 1 }, link: 'https://user:pass@example.com/' }), { auth: { allowed: 1 }, link: 'https://example.com/' });
+  assert.deepEqual(sanitizeMetadata({ auth: { password: 'private', allowed: 1 }, link: 'https://user:pass@example.com/' }), { link: 'https://example.com/' });
 });
 
 test('CSV parsing handles BOM, quoting, multiline fields, stable row IDs, and bounded imports', () => {
@@ -131,6 +131,7 @@ function memoryService() {
     if (!rows.has(owner)) rows.set(owner, []);
     return {
       identities: async () => structuredClone(rows.get(owner)!), list: async () => structuredClone(rows.get(owner)!),
+      findById: async id => structuredClone(rows.get(owner)!.find(item => item.id === id) || null),
       insert: async lead => { rows.get(owner)!.push(structuredClone(lead)); return lead; },
       link: async (id, provenance) => { const lead = rows.get(owner)!.find(item => item.id === id)!; lead.provenance.push(...provenance); return lead; }
     };

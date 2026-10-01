@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 0 is approved and complete. Phase 1 discovery/ingestion and its Supabase prerequisites are implemented and verified. Stop for Phase 1 review. **Phase 2 has not started and requires approval.**
+Phase 0 is approved and complete. Phase 1 discovery/ingestion, its Supabase prerequisites, and the three requested Phase 1 review fixes are implemented and verified. Stop for review of this separate fix commit. **Phase 2 has not started and requires approval.**
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
@@ -50,15 +50,29 @@ SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. S
 
 ## Validation — 2026-10-01
 
-- npm run check: PASS — lint with zero warnings, TypeScript including tests, 16 tests, production shared/API/web builds.
+- npm run check: PASS — lint with zero warnings, TypeScript including tests, 22 tests, production shared/API/web builds.
 - Tests cover normalization/provenance, malformed/oversized CSV, Nominatim city restriction/cache, OSM/SerpAPI mapping, free-plan/quota guards, provider cache/persisted reservations/failure handling, conservative duplicates, preview ownership/mass assignment/retries, explicit source links, Auth guards, safe 400/413/API errors, and actual PostgreSQL migration/RLS enforcement through development-only PGlite.
 - npm run verify:supabase: PASS remotely for both accounts/tables, including persistence and all cross-user/anonymous/ownership checks. Disposable records cleaned up.
 - npm run verify:phase1 -- --live-source: PASS with the built API. CSV preview/save/reload, cross-user preview rejection/RLS isolation, retry protection, exact duplicate review, explicit provenance linking, and reviewed separate branch saves work.
 - Live OSM/Overpass city+niche discovery returned 24 normalized businesses; source identifiers/raw tags were retained, identical queries cached, and a discovered lead persisted remotely. Only generated verifier rows were deleted.
 - Browser CSV upload produced two preview rows, marked the conflicting shared-domain branch for review, saved the selected row, and reloaded it from Supabase. User B's collection remained empty. Browser test lead removed; both sessions signed out.
-- Browser checks at 1280×720, 390×844, 320×740, 844×320, and 320×320: sidebar/header bounds fixed while content scrolls; all navigation accessible; zero document/horizontal overflow; exactly one visible vertical scroller (workspace-content).
-- Secret audit: 63 publishable files and six production web output files scanned without emitting actual values. No secret env/build/usage artifacts are tracked.
+- Browser evidence from the unchanged Phase 1 UI at 1280×720, 390×844, 320×740, 844×320, and 320×320: sidebar/header bounds fixed while content scrolls; all navigation accessible; zero document/horizontal overflow; exactly one visible vertical scroller (workspace-content). This fix does not change the UI layout.
+- Secret audit: publishable files, Git file history, and six production web output files scanned without emitting actual values. No secret env/build/usage artifacts are tracked.
 - Dependency installation audit reported zero vulnerabilities.
+
+## Phase 1 review fixes — 2026-10-01
+
+Reviewed base: 9e444a99b7478fa22600d10972f13c6c70091108. The user authorized only these fixes and Phase 2 safety preparation, followed by checks, a separate commit/push, and a review stop.
+
+- Canonical website/social URLs and provenance URLs now share credential sanitization. Unknown query parameters and all fragments are removed; only validated, bounded page/language selectors remain. Canonical userinfo remains rejected; metadata userinfo is removed. Regression tests cover token/key/auth variants, encoded/duplicate keys, fragment tokens, scheme-less/international URLs, and nested metadata. Live CSV persistence confirms the credential fixture is absent from canonical URLs and provenance.
+- Save retries reconcile by verified owner + server-created preview lead UUID, before duplicate rejection or insert. An already-persisted record returns success without an overwrite or second insert. Unit tests cover lost acknowledgements for save/separate actions, repeated retries, foreign records, and failed lookups. The live verifier simulates a lost acknowledgement after a real Supabase insert, then confirms retry success with one insert and owner-only lookup.
+- Provenance comparison recursively canonicalizes object keys while retaining array order and changed values. Tests exercise actual PostgreSQL JSONB reordering and repeated links. Live repeat linking after a remote JSONB round trip preserves the two genuine source entries without adding a third.
+- apps/api/src/website-safety.ts exposes sanitized canonical and linked CSV/OSM/SerpAPI website evidence with source IDs/field paths; it does not choose a website, merge fields, fetch pages, classify, or score.
+- A server-only destination validator rejects credentials/non-web protocols/nonstandard ports, internal hostnames, non-public IP literals or DNS answers, metadata/platform endpoints, and special-purpose IPv6. It fails closed on DNS errors/mixed answers and has a bounded DNS wait. Tests use injected DNS answers and do not fetch blocked targets.
+- README documents the mandatory future transport hook: pin validated addresses with original Host/TLS identity, disable automatic redirects, validate/pin every redirect afresh, and bound transport work. Validation followed by ordinary fetch(url) is insufficient against DNS rebinding. The audit engine and that website transport remain unimplemented.
+- Re-ran live auth/RLS checks on both tables/accounts and CSV/OSM discovery/cache/persistence verification. OSM returned 24 results. Only generated verifier records were cleaned up; no migration, policy, or auth behavior changed.
+
+Fix file groups: discovery normalization/repository/save service; new website safety helpers; discovery and new review regression tests; enhanced live Phase 1 verifier; README and PROJECT_STATE.md. No frontend redesign, new dependency, migration, or V2 feature.
 
 ## Changed file groups
 
@@ -74,15 +88,17 @@ SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. S
 
 ## Limitations and Phase 2 handoff
 
-No remaining Supabase prerequisite or Phase 1 implementation blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. The required live-source exit criterion is satisfied by OSM.
+The three reported review defects are fixed and verified; review approval remains pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. The required live-source exit criterion is satisfied by OSM. Verify live SerpAPI before enabling/relying on it; its pending verification alone does not block the documented one-live-source criterion.
 
 This personal architecture uses one API process. Persist .local/provider-usage.json across restarts; do not reset it to bypass caps. Previews/cache/locks are process-local and do not support replicas. A preview expires after 30 minutes or API restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate reads 2,000 owner records, saved read view latest 100, history 100 provenance records/lead. Failures are explicit; uncertain records never silently merge. OSM coverage/bounding boxes require relevance review.
 
-Phase 2 requires Phase 1 review approval. Add deterministic audits/classification/scoring only after approval; no fabricated results. Lead management and outreach remain Phases 3 and 4.
+Phase 2 requires Phase 1 review approval. Consider preserved provenance before concluding NO_WEBSITE; expose conflicts for explicit review. Before any website HTTP fetching, implement the pinned-address/redirect-safe transport described above and test DNS rebinding and private redirect destinations. The safety helpers alone do not provide a safe fetcher. Add deterministic audits/classification/scoring only after approval; no fabricated results. Lead management and outreach remain Phases 3 and 4.
 
 ## Publication and mandatory workflow
 
 Phase 1 commit message: feat: implement Phase 1 lead discovery and ingestion. Target: origin/main. Git history and the final handoff record the confirmed commit hash/push status.
+
+Separate review-fix commit message: fix: harden Phase 1 URLs, save retries, and provenance. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 2.
 
 At every future completed phase: run tests/lint/typecheck/build, review against SPEC.md, update state and limitations, commit separately, push and confirm SHA/status, then stop for review. Do not start the next phase without approval.
 

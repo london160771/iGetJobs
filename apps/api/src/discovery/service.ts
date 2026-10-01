@@ -90,6 +90,16 @@ export class DiscoveryService {
         const lead = stored.preview.rows.find(row => row.lead.id === selection.id)!.lead;
         const duplicate = duplicateCheck(lead, existing);
         try {
+          // A previous insert may have committed even if its response was lost.
+          // The ID is server-created in this owner-bound preview, never browser supplied.
+          const persisted = selection.action !== 'link' ? await repository.findById(lead.id) : null;
+          if (persisted) {
+            const result = { rowId: lead.id, status: 'saved' as const, leadId: persisted.id };
+            stored.completed.set(lead.id, result);
+            results.push(result);
+            if (!existing.some(item => item.id === persisted.id)) existing.push(persisted);
+            continue;
+          }
           if (selection.action === 'save' && duplicate.kind !== 'new') throw new RequestError(409, 'A matching lead now exists. Refresh the preview and review this duplicate.');
           if (selection.action === 'link' && !duplicate.canLink) throw new RequestError(409, 'Source metadata can only be added to one exact saved match. Refresh the preview.');
           const saved = selection.action === 'link' ? await repository.link(duplicate.matchIds[0]!, lead.provenance) : await repository.insert(lead);
