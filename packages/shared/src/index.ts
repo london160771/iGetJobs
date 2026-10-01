@@ -8,6 +8,8 @@ export type IsoDateTime = string;
 export interface LeadProvenance {
   source: LeadSource;
   sourceId: string | null;
+  /** Original source fields, with credential fields/URL credentials removed. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface AuditCheck {
@@ -83,4 +85,34 @@ export interface HealthResponse {
 
 export interface ApiError {
   error: string;
+}
+
+export interface DiscoveryQuery { country: string; city: string; niche: string }
+export interface DiscoveryConfig {
+  markets: { code: string; label: string }[];
+  niches: { id: string; label: string }[];
+  sources: { id: 'OSM' | 'SERPAPI'; label: string; available: boolean }[];
+  csvMaxBytes: number;
+  maxResults: number;
+}
+export interface DuplicateCheck {
+  kind: 'new' | 'exact' | 'possible';
+  matchIds: string[];
+  reasons: string[];
+  canLink: boolean;
+  matches: { businessName: string; address: string | null; city: string | null; source: LeadSource; persisted: boolean }[];
+}
+export interface PreviewRow { lead: Lead; duplicate: DuplicateCheck; warnings: string[] }
+export interface DiscoveryPreview {
+  id: string;
+  expiresAt: IsoDateTime;
+  rows: PreviewRow[];
+  warnings: string[];
+  attribution: string;
+  cached: boolean;
+}
+export type SaveAction = 'save' | 'link' | 'separate';
+export interface SaveSelection { id: string; action: SaveAction }
+export interface SaveResult {
+  results: { rowId: string; status: 'saved' | 'linked' | 'failed'; leadId?: string; error?: string }[];
 }

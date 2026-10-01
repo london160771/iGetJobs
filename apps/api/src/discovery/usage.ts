@@ -1,0 +1,67 @@
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { RequestError } from './errors.js';
+type Usage = Record<string, { period: string; count: number; lastCall: number }>;
+export interface UsageStore { load(): Promise<Usage>; save(usage: Usage): Promise<void> }
+export function fileUsageStore(path: string): UsageStore {
+  return {
+    async load() {
+      try {
+        const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+        if (!value || typeof value !== 'object' || Array.isArray(value) || Object.values(value).some(row => !row || typeof row.period !== 'string' || !Number.isInteger(row.count) || row.count < 0 || !Number.isFinite(row.lastCall))) throw new Error();
+        return value as Usage;
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return {};
+        throw new RequestError(503, 'Discovery usage protection is unavailable.');
+      }
+    },
+    async save(usage) {
+      try {
+        await mkdir(dirname(path), { recursive: true });
+        const temporary = path + '.' + randomUUID() + '.tmp';
+        await writeFile(temporary, JSON.stringify(usage), { mode: 0o600 });
+        await rename(temporary, path);
+      } catch { throw new RequestError(503, 'Discovery usage protection is unavailable.'); }
+    }
+  };
+}
+export class ProviderGuard {
+  private busy = false;
+  private cache = new Map<string, { value: unknown; expires: number; bytes: number }>();
+  private pending = new Map<string, Promise<{ value: unknown; cached: boolean }>>();
+  constructor(private store: UsageStore, private serpLimit = 50, private now = () => Date.now()) {}
+  async run<T>(source: 'OSM' | 'SERPAPI', key: string, collect: () => Promise<T>): Promise<{ value: T; cached: boolean }> {
+    const cached = this.cache.get(key);
+    if (cached && cached.expires > this.now()) return { value: structuredClone(cached.value) as T, cached: true };
+    const pending = this.pending.get(key);
+    if (pending) return { value: structuredClone((await pending).value) as T, cached: true };
+    if (this.busy) throw new RequestError(429, 'Another discovery request is running. Please wait for it to finish.');
+    this.busy = true;
+    const task = (async () => {
+      try {
+        const usage = await this.store.load();
+        const period = new Date(this.now()).toISOString().slice(0, source === 'OSM' ? 10 : 7);
+        const previous = usage[source];
+        const count = previous?.period === period ? previous.count : 0;
+        const interval = source === 'OSM' ? 15000 : 5000;
+        if (previous && this.now() - previous.lastCall < interval) throw new RequestError(429, 'Please wait before starting another discovery search.');
+        if (count >= (source === 'OSM' ? 30 : this.serpLimit)) throw new RequestError(429, source === 'OSM' ? 'The daily OpenStreetMap search limit has been reached.' : 'The monthly SerpAPI search limit has been reached.');
+        usage[source] = { period, count: count + 1, lastCall: this.now() };
+        await this.store.save(usage); // Reserve attempts before network I/O; failed attempts remain counted.
+        const value = await collect();
+        for (const [cacheKey, entry] of this.cache) if (entry.expires <= this.now()) this.cache.delete(cacheKey);
+        const bytes = Buffer.byteLength(JSON.stringify(value));
+        let total = [...this.cache.values()].reduce((sum, entry) => sum + entry.bytes, 0);
+        while (this.cache.size && (this.cache.size >= 100 || total + bytes > 16 * 1024 * 1024)) {
+          const oldest = this.cache.keys().next().value!;
+          total -= this.cache.get(oldest)!.bytes; this.cache.delete(oldest);
+        }
+        if (bytes <= 16 * 1024 * 1024) this.cache.set(key, { value: structuredClone(value), expires: this.now() + 3600000, bytes });
+        return { value, cached: false };
+      } finally { this.busy = false; this.pending.delete(key); }
+    })();
+    this.pending.set(key, task);
+    return await task;
+  }
+}

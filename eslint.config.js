@@ -8,7 +8,7 @@ export default tseslint.config(
   { ignores: ['**/dist/**', '**/node_modules/**'] },
   js.configs.recommended,
   tseslint.configs.recommended,
-  { files: ['**/*.{js,ts,tsx}'], languageOptions: { globals: globals.node }, rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }] } },
+  { files: ['**/*.{js,mjs,ts,tsx}'], languageOptions: { globals: globals.node }, rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }] } },
   {
     files: ['apps/web/src/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },

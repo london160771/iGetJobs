@@ -5,6 +5,7 @@ import { readServerEnv } from '../apps/api/src/env.js';
 import { createServerSupabase } from '../apps/api/src/supabase.js';
 import { createApp } from '../apps/api/src/app.js';
 import { readPublicEnv } from '../apps/web/src/lib/env.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const url = 'https://example.supabase.co';
 const key = 'sb_publishable_test-only';
@@ -31,6 +32,52 @@ test('browser config accepts public keys and refuses private credentials without
   for (const privateKey of ['sb_secret_test-only', jwt('service_role'), 'malformed']) {
     assert.throws(() => readPublicEnv({ VITE_SUPABASE_URL: url, VITE_SUPABASE_PUBLISHABLE_KEY: privateKey }),
       error => error instanceof Error && /forbidden/.test(error.message) && !error.message.includes(privateKey));
+  }
+});
+
+test('root public configuration and legacy key aliases work without accepting admin keys', () => {
+  const root = { VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: key };
+  assert.deepEqual(readPublicEnv(root), { supabaseUrl: url, supabaseKey: key });
+  assert.equal(readServerEnv(root).supabaseKey, key);
+  assert.equal(readServerEnv({ SUPABASE_URL: url, SUPABASE_ANON_KEY: key }).supabaseKey, key);
+  assert.throws(() => readPublicEnv({ ...root, VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_different' }), /agree/);
+  assert.throws(() => readServerEnv({ ...root, SUPABASE_URL: url }), /both/);
+  assert.throws(() => readServerEnv({ SUPABASE_URL: url, SUPABASE_ANON_KEY: 'sb_secret_test-only' }), /private/);
+  assert.throws(() => readPublicEnv({ ...root, VITE_SUPABASE_ANON_KEY: 'sb_secret_test-only' }), /forbidden/);
+});
+
+test('protected API verifies tokens with Auth and never echoes credentials or provider errors', async () => {
+  const verifiedTokens: string[] = [];
+  const client = { auth: { getUser: async (token: string) => {
+    verifiedTokens.push(token);
+    if (token === 'transport-failure') throw new Error('private transport details');
+    return token === 'valid-test-token'
+      ? { data: { user: { id: 'verified-user-id' } }, error: null }
+      : { data: { user: null }, error: { message: 'private provider details' } };
+  } } } as unknown as SupabaseClient;
+  const server = createApp(client).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const endpoint = 'http://127.0.0.1:' + address.port + '/api/session';
+    for (const authorization of ['', 'Basic invalid', 'Bearer ', 'Bearer two tokens']) {
+      const response = await fetch(endpoint, { headers: { Authorization: authorization } });
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { error: 'Sign in to continue.' });
+    }
+    assert.equal(verifiedTokens.length, 0);
+    const valid = await fetch(endpoint, { headers: { Authorization: 'Bearer valid-test-token' } });
+    assert.equal(valid.status, 200);
+    assert.deepEqual(await valid.json(), { userId: 'verified-user-id' });
+    const invalid = await fetch(endpoint, { headers: { Authorization: 'Bearer rejected-token' } });
+    assert.equal(invalid.status, 401);
+    assert.deepEqual(await invalid.json(), { error: 'Unable to verify your session. Please sign in again.' });
+    const failure = await fetch(endpoint, { headers: { Authorization: 'Bearer transport-failure' } });
+    assert.equal(failure.status, 503);
+    assert.deepEqual(await failure.json(), { error: 'Authentication is temporarily unavailable.' });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
 
@@ -71,7 +118,7 @@ test('API health is honest; unknown routes, malformed and oversized JSON fail sa
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('x-powered-by'), null);
       assert.deepEqual(await response.json(), { status: 'ok', service: 'igetjobs-api', supabase: configured ? 'configured' : 'unconfigured' });
-      const missing = await fetch(base + '/api/leads');
+      const missing = await fetch(base + '/api/unknown');
       assert.equal(missing.status, 404);
       assert.deepEqual(await missing.json(), { error: 'Route not found.' });
       const malformed = await fetch(base + '/api/unknown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' });

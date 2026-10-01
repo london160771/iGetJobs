@@ -6,9 +6,14 @@ export interface PublicEnv {
 /** Also runs in Vite config so invalid/private credentials fail before bundling. */
 export function readPublicEnv(env: Record<string, string | undefined>): PublicEnv {
   const supabaseUrl = env.VITE_SUPABASE_URL?.trim() || null;
-  const supabaseKey = env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || null;
+  const publishableKey = env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || null;
+  const anonKey = env.VITE_SUPABASE_ANON_KEY?.trim() || null;
+  if (publishableKey && anonKey && publishableKey !== anonKey) {
+    throw new Error('Supabase public-key aliases must agree when both are set.');
+  }
+  const supabaseKey = publishableKey || anonKey;
   if (Boolean(supabaseUrl) !== Boolean(supabaseKey)) {
-    throw new Error('Set both VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY, or leave both empty.');
+    throw new Error('Set both VITE_SUPABASE_URL and a public Supabase key, or leave both empty.');
   }
   if (supabaseUrl) {
     let url: URL;

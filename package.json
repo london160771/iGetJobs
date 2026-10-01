@@ -17,9 +17,12 @@
     "typecheck": "npm run build -w @igetjobs/shared && npm run typecheck --workspaces && tsc -p tsconfig.json",
     "build": "npm run build --workspaces",
     "test": "npm run build -w @igetjobs/shared && node --import tsx --test tests/*.test.ts",
+    "verify:supabase": "node scripts/verify-supabase.mjs",
+    "verify:phase1": "node scripts/verify-phase1.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^10.0.1",
     "concurrently": "^9.2.0",
     "eslint": "^10.11.0",
