@@ -1,0 +1,33 @@
+{
+  "name": "igetjobs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @igetjobs/shared && concurrently -k -n api,web \"npm run dev -w @igetjobs/api\" \"npm run dev -w @igetjobs/web\"",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "npm run build -w @igetjobs/shared && npm run typecheck --workspaces && tsc -p tsconfig.json",
+    "build": "npm run build --workspaces",
+    "test": "npm run build -w @igetjobs/shared && node --import tsx --test tests/*.test.ts",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.2.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.46.0"
+  }
+}
