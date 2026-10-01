@@ -78,6 +78,20 @@ AGENTS.md and PLAN.md now record the user's mandatory per-phase commit, push, an
 - At 844×390 landscape: sidebar, all navigation, and sidebar footer remain fully visible.
 - Separate fix commit: `fix: keep app navigation fixed while content scrolls`; target origin/main. Final handoff confirms its SHA and push status.
 
+## Phase 0 review fixes — 2026-10-01
+- Approved scope: short-height navigation clipping and oversized JSON status handling only. Phase 1 has not started.
+- At desktop widths above 760px and heights up to 380px, navigation uses the existing horizontal mobile pattern with the phase footer retained. Taller desktop viewports keep the left sidebar; mobile styling is unchanged.
+- Sidebar/navigation and top bar remain outside the sole scrolling workspace content container.
+- JSON parser payload-limit errors return HTTP 413 with a safe `Payload too large.` response. Existing malformed JSON (400), unknown route (404), and generic error (500) handling is preserved.
+- Changed files: apps/web/src/styles.css, apps/api/src/app.ts, tests/foundation.test.ts, PROJECT_STATE.md.
+- npm run check: PASS (lint, typecheck, 4 tests, production build).
+- API regression checks run with and without Supabase configuration: exactly 100KB is accepted by the parser; 100KB plus one byte returns 413. Existing malformed JSON and unknown route assertions pass.
+- Browser verification at 844×320: all five navigation links and the phase footer are fully visible; keyboard navigation reaches Settings; PageDown scrolls content while navigation/header bounds stay unchanged.
+- Desktop 1280×720 and mobile 390×844 scrolling remain correct. Narrow mobile 320×320, the 844×381 height boundary, and 761×320 width boundary retain accessible navigation.
+- All inspected viewports have zero document/horizontal overflow and exactly one vertical scroll container: workspace-content. Browser console reports no warnings/errors.
+- Separate fix commit: `fix: address Phase 0 landscape clipping and payload limits`; target origin/main. Final handoff confirms its SHA and push status.
+- Live Supabase connectivity, authentication, owner-scoped RLS, and connection verification remain unresolved prerequisites before persistent lead access in Phase 1.
+
 ## Limitations / blockers
 No remaining Phase 0 implementation blocker.
 
@@ -89,7 +103,7 @@ Before Phase 1 persistence, add the database schema with owner-scoped row-level 
 Phase commit message: `feat: establish Phase 0 project foundation`. Publication target: `origin/main`. Git history and the final phase handoff record the confirmed SHA and push status.
 
 ## Next approved action
-Review Phase 0 and its shell scrolling correction only. **Phase 1 has not started and is not approved.**
+Review Phase 0, its shell scrolling correction, and the two review fixes only. **Phase 1 has not started and is not approved.**
 
 At the end of every future completed phase:
 1. Run relevant checks and lint/typecheck/build.

@@ -18,6 +18,12 @@ export function createApp(supabase: SupabaseClient | null) {
   });
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const badJson = error instanceof SyntaxError && 'status' in error && error.status === 400;
+    const oversizedJson = error instanceof Error && 'status' in error && error.status === 413
+      && 'type' in error && error.type === 'entity.too.large';
+    if (oversizedJson) {
+      res.status(413).json({ error: 'Payload too large.' } satisfies ApiError);
+      return;
+    }
     res.status(badJson ? 400 : 500).json({ error: badJson ? 'Invalid JSON.' : 'Request failed.' } satisfies ApiError);
   });
   return app;

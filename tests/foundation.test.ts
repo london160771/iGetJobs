@@ -58,7 +58,7 @@ test('server Supabase setup keeps request credentials isolated', async () => {
   }
 });
 
-test('API health is honest and contains no credentials; unknown routes and malformed JSON fail safely', async () => {
+test('API health is honest; unknown routes, malformed and oversized JSON fail safely', async () => {
   for (const configured of [false, true]) {
     const client = configured ? createServerSupabase(readServerEnv({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: key })) : null;
     const server = createApp(client).listen(0, '127.0.0.1');
@@ -77,6 +77,15 @@ test('API health is honest and contains no credentials; unknown routes and malfo
       const malformed = await fetch(base + '/api/unknown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' });
       assert.equal(malformed.status, 400);
       assert.deepEqual(await malformed.json(), { error: 'Invalid JSON.' });
+      // Include JSON overhead so the complete UTF-8 body is exactly at the 100KB limit.
+      const atLimitBody = JSON.stringify({ value: 'a'.repeat(100 * 1024 - 12) });
+      assert.equal(Buffer.byteLength(atLimitBody), 100 * 1024);
+      const atLimit = await fetch(base + '/api/unknown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: atLimitBody });
+      assert.equal(atLimit.status, 404);
+      assert.deepEqual(await atLimit.json(), { error: 'Route not found.' });
+      const oversized = await fetch(base + '/api/unknown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: 'a'.repeat(100 * 1024 - 11) }) });
+      assert.equal(oversized.status, 413);
+      assert.deepEqual(await oversized.json(), { error: 'Payload too large.' });
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
