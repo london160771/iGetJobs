@@ -59,8 +59,10 @@ function AppShell() {
         <span><span className="muted">Workspace</span><span className="breadcrumb-divider">/</span>{current?.label || (location.pathname.startsWith('/leads/') ? 'Lead detail' : 'Page not found')}</span>
         <ApiStatus />
       </header>
-      <main id="main" tabIndex={-1}><Outlet /></main>
-      <footer className="workspace-footer">Find the right businesses. Build better websites.</footer>
+      <div className="workspace-content">
+        <main id="main" tabIndex={-1}><Outlet /></main>
+        <footer className="workspace-footer">Find the right businesses. Build better websites.</footer>
+      </div>
     </div>
   </div>;
 }

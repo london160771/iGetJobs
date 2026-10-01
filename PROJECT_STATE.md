@@ -65,6 +65,19 @@ AGENTS.md and PLAN.md now record the user's mandatory per-phase commit, push, an
 - Runtime checks needed approved execution outside the sandbox because tsx's OS user-information lookup was restricted.
 - No live provider request, database table, migration, auth flow, ingestion, deduplication, audit, scoring, or outreach implementation was added.
 
+## Phase 0 UI correction — 2026-10-01
+- Approved scope: fix shell scrolling only; Phase 1 remains unapproved.
+- App shell fills the dynamic viewport; sidebar and top bar stay outside the scrolling content.
+- One workspace content container scrolls the route outlet and footer; no document scrollbar.
+- Existing desktop styling and wrapped mobile navigation are preserved.
+- Short desktop/landscape viewports use compact sidebar spacing to keep all navigation and the sidebar footer visible.
+- Changed files: apps/web/src/App.tsx, apps/web/src/styles.css, PROJECT_STATE.md.
+- npm run lint, npm run typecheck, npm run build: PASS.
+- Browser verification at 1280×720 desktop and 390×844 mobile: content scrolls while sidebar/header bounds stay unchanged; exactly one vertical scroll container and zero document overflow.
+- At 320×740: no horizontal overflow; keyboard PageDown scrolls only workspace content.
+- At 844×390 landscape: sidebar, all navigation, and sidebar footer remain fully visible.
+- Separate fix commit: `fix: keep app navigation fixed while content scrolls`; target origin/main. Final handoff confirms its SHA and push status.
+
 ## Limitations / blockers
 No remaining Phase 0 implementation blocker.
 
@@ -76,7 +89,7 @@ Before Phase 1 persistence, add the database schema with owner-scoped row-level 
 Phase commit message: `feat: establish Phase 0 project foundation`. Publication target: `origin/main`. Git history and the final phase handoff record the confirmed SHA and push status.
 
 ## Next approved action
-Review Phase 0 only. **Phase 1 has not started and is not approved.**
+Review Phase 0 and its shell scrolling correction only. **Phase 1 has not started and is not approved.**
 
 At the end of every future completed phase:
 1. Run relevant checks and lint/typecheck/build.
