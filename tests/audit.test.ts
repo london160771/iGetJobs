@@ -74,7 +74,7 @@ test('acceptable and poor HTML have deterministic checks, classification and mea
   assert.deepEqual(good, await auditLead(original, undefined, defaultScoring, async () => result(), fixedTime));
   const poorHtml = '<html><head><style>body { min-width: 900px; }</style></head><body><a href="#missing">Services</a></body></html>';
   const poor = await auditLead(original, undefined, defaultScoring, async () => ({ ...result(poorHtml, 'http://clinic.com/'), durationMs: 4000, bytes: 600000 }), fixedTime);
-  assert.equal(poor.classification, 'POOR_WEBSITE'); assert.equal(poor.score, 57);
+  assert.equal(poor.classification, 'POOR_WEBSITE'); assert.equal(poor.score, 51);
   assert.equal(poor.scoreReasons.reduce((sum, item) => sum + item.points, 0), poor.score);
   assert.ok(poor.audit.checks.some(check => check.key === 'links' && check.outcome === 'fail'));
 });

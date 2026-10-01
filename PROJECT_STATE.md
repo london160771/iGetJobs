@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 0 and 1 are approved and complete, including all reviewed sanitization, retry and provenance fixes. The user authorized Phase 2 only. Website evidence resolution, safe fetching, deterministic audits, classification, configurable explainable scoring, Supabase assessment persistence, and the Leads/Lead Detail UI are implemented and verified. The separate responsive correction below replaces horizontal mobile navigation with an accessible off-canvas sidebar. **Stop for Phase 2 review. Phase 3 has not started.**
+Phases 0 and 1 are approved and complete, including all reviewed sanitization, retry and provenance fixes. The user authorized Phase 2 only. Website evidence resolution, safe fetching, deterministic audits, classification, configurable explainable scoring, Supabase assessment persistence, and the Leads/Lead Detail UI are implemented and verified. The separate responsive correction below replaces horizontal mobile navigation with an accessible off-canvas sidebar. Phase 2 review fixes now bound/isolate HTML analysis, preserve malformed website evidence for review, and remove unverified CSS penalties. **Stop for Phase 2 review. Phase 3 has not started.**
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
@@ -126,6 +126,21 @@ Reviewed base: f0f80f537b0b5dc8cd25e4802f1fa2c0137b34d4. This separate UI correc
 - Secret scan: PASS — local configuration values absent from publishable files and Git file history; private/test credentials absent from web output. Env/build/test artifacts remain ignored.
 - Changed files: apps/web/src/App.tsx, apps/web/src/styles.css, DESIGN.md, README.md and PROJECT_STATE.md. No backend, schema, auth policy, discovery or audit-engine change. Phase 2 review is pending.
 
+## Phase 2 review fixes — 2026-10-01
+
+Reviewed base: 4514d2fc87e8b801c8b70584d4bf4e409920101d (Phase 2 implementation f0f80f537b0b5dc8cd25e4802f1fa2c0137b34d4 plus mobile drawer correction). This separate fix addresses only the three reviewed audit issues and records the future invalidation requirement; it does not begin Phase 3.
+
+- Contact detection now scans text once with fixed-size email tokens (254 characters maximum, local part 64) and phone runs (40 characters). Long unbroken tokens are never passed to a backtracking email regex. Regression cases include the reproduced 40,000-character text, long malformed email, 64,000-character text and a valid email following a long token.
+- All HTML parsing/selectors execute in a short-lived Node worker, preserving API event-loop responsiveness even for pathological parser input. Limits: 128KB UTF-8 HTML, 64K visible text characters, 4,000 nodes, depth 64, 64MB worker old-generation heap, five-second initialization and 750ms inspection deadline. Oversized/complex/unresponsive analysis returns HTTP 422, leaves quality unverified and does not persist a partial assessment. Production uses compiled JS; development uses the existing tsx dependency. No page scripts execute and no dependency is added.
+- Website evidence supports sanitized strings and flat lists of up to 16 strings with indexed source paths. Unknown objects/scalars, nested/mixed/oversized lists, overly long URLs and malformed source containers remain invalid/review-required. Structured canonical input is preserved in sanitized metadata, with a review marker instead of a guessed website. Candidates and invalid markers survive persistence; invalid-only evidence cannot become NO_WEBSITE.
+- CSS selector applicability, media conditions, cascade and rendered impact are not established by this static audit. CSS width behavior is now unknown and earns no penalty, including inline declarations. Unused/desktop-only/overridden CSS regression cases retain the baseline classification and score. The existing mobile_width weight remains compatible but inactive for unknown outcomes.
+- New assessments identify these revised checks as static-v1.1. Existing assessments remain dated historical snapshots; rerun them to apply the corrections. No automatic data rewrite, UI redesign, schema/RLS change or management editing is added.
+- npm run check: PASS — 47 tests, zero-warning lint, typecheck including tests, shared/API/web production builds. Tests additionally cover analysis byte/text/tree bounds, startup and post-ready worker deadlines, event-loop yielding, repeated deterministic results, malformed evidence/array persistence and CSS scoring regressions. Existing private/internal blocking, redirect revalidation/pinning, Host/TLS, rebinding, classification/scoring and stale-write/source-link regressions remain passing.
+- Production benchmark on this machine: 10K/20K/40K/64K unbroken text inspections took 72/53/30/31ms; the reproduced 40K case previously took 12.6 seconds. An event-loop heartbeat fired after 22ms while isolated inspection ran. Timing is machine-dependent; the worker deadlines provide runtime enforcement.
+- npm run verify:supabase: PASS — live Auth, persistence and bidirectional cross-user/anonymous/ownership denial on leads and user_settings. npm run verify:phase2 -- --live-website: PASS — enhanced authenticated API cases verify long-text and desktop-only CSS scoring, malformed structured evidence, sanitized array candidates through remote JSONB/explicit selection, large-page refusal, owner isolation, stale-write rejection, assessment invalidation/idempotent linking and real pinned HTTPS fetching. Only generated disposable records are cleaned up.
+- Secret scan: PASS — local configuration absent from publishable files/Git file history; test/private credentials absent from web output; env/build/usage/test artifacts remain ignored. No secret values are printed. The unchanged web build retains its non-blocking approximately 500KB chunk-size advisory.
+- Changed files: API audit engine/new bounded HTML worker, website-safety evidence resolver, discovery normalization, audit regression tests, live Phase 2 verifier, README.md and PROJECT_STATE.md. The responsive drawer and Phase 1 discovery behavior remain unchanged.
+
 ## Earlier Phase 0/1 changed file groups
 
 - apps/api/src/auth.ts and app/env/index/Supabase setup: verified authentication, safe routing/configuration/transport.
@@ -148,6 +163,8 @@ Phase 2 uses static HTML, not a rendered browser audit. JavaScript-only pages, e
 
 Preserve safety in later phases: use provenance before NO_WEBSITE; pin validated IPs, preserve Host/TLS checks, disable automatic redirects, revalidate/repin every hop, keep bounds and rebinding/private-redirect tests. Do not bypass the pinned transport or execute page assets. Keep classifications/scoring deterministic and explicit. Phase 3 requires review approval; management/outreach remain their approved later phases.
 
+Mandatory Phase 3 rule: management edits changing website/domain, provenance/source identifiers, phone/email, rating or review count must atomically clear audit, classification, score and score_reasons in the same owner/timestamp-guarded update. Reaudit before presenting these derived values as current; preserve identical-link behavior. Implement and test this alongside future management edits, after Phase 3 approval. HTML analysis bounds and CSS-unknown behavior must remain intact.
+
 ## Publication and mandatory workflow
 
 Phase 1 commit message: feat: implement Phase 1 lead discovery and ingestion. Target: origin/main. Git history and the final handoff record the confirmed commit hash/push status.
@@ -159,6 +176,8 @@ Separate protocol-relative fix commit message: fix: sanitize protocol-relative U
 Phase 2 commit message: feat: implement safe website audits and explainable scoring. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 3.
 
 Separate responsive correction commit message: fix: use an accessible off-canvas sidebar on mobile. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for Phase 2 review before Phase 3.
+
+Separate Phase 2 review-fix commit message: fix: bound audit analysis and preserve uncertain website evidence. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for Phase 2 review before Phase 3.
 
 At every future completed phase: run tests/lint/typecheck/build, review against SPEC.md, update state and limitations, commit separately, push and confirm SHA/status, then stop for review. Do not start the next phase without approval.
 

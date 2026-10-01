@@ -13,13 +13,24 @@ export function collectWebsiteEvidence(lead: Lead): WebsiteEvidence[] {
 export function resolveWebsiteEvidence(lead: Lead): WebsiteResolution {
   const evidence: WebsiteResolution['evidence'] = [];
   function add(value: unknown, source: LeadSource, sourceId: string | null, path: string) {
-    if (typeof value !== 'string' || !value.trim()) return;
-    const url = websiteUrl(value);
+    if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return;
+    // Only strings and bounded, flat lists of strings are supported URL shapes.
+    // Unknown objects/scalars/nested lists stay review-required, never absent.
+    if (Array.isArray(value)) {
+      if (!value.length) return;
+      if (value.length > 16) { evidence.push({ url: null, source, sourceId, path }); return; }
+      value.forEach((item, index) => {
+        const url = typeof item === 'string' && item.length <= 2000 ? websiteUrl(item) : null;
+        evidence.push({ url, source, sourceId, path: `${path}[${index}]` });
+      });
+      return;
+    }
+    const url = typeof value === 'string' && value.length <= 2000 ? websiteUrl(value) : null;
     evidence.push({ url, source, sourceId, path });
   }
   add(lead.website, lead.source, lead.sourceId, 'website');
   for (const entry of lead.provenance) {
-    const metadata = entry.metadata || {};
+    const metadata = entry.metadata ?? {};
     const start = evidence.length;
     add(metadata.website, entry.source, entry.sourceId, 'metadata.website');
     const fields = entry.source === 'OSM' ? metadata.tags : entry.source === 'CSV' ? metadata.fields : null;
@@ -28,7 +39,8 @@ export function resolveWebsiteEvidence(lead: Lead): WebsiteResolution {
         const name = key.toLowerCase().replace(/[_\s-]/g, '');
         if (['website', 'domain', 'contact:website'].includes(name)) add(value, entry.source, entry.sourceId, 'metadata.' + (entry.source === 'OSM' ? 'tags.' : 'fields.') + key);
       }
-    }
+    } else if (fields !== null && fields !== undefined) evidence.push({ url: null, source: entry.source, sourceId: entry.sourceId, path: 'metadata.' + (entry.source === 'OSM' ? 'tags' : 'fields') });
+    if (typeof metadata !== 'object' || Array.isArray(metadata)) evidence.push({ url: null, source: entry.source, sourceId: entry.sourceId, path: 'metadata' });
     if (metadata.websiteEvidenceInvalid === true && !evidence.slice(start).some(item => item.url === null)) evidence.push({ url: null, source: entry.source, sourceId: entry.sourceId, path: 'metadata.websiteEvidenceInvalid' });
   }
   const candidates = [...new Set(evidence.flatMap(item => item.url ? [item.url] : []))];

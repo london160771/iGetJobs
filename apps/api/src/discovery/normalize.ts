@@ -73,7 +73,12 @@ export function normalizeLead(record: SourceRecord, source: LeadSource): { lead:
   const metadata = sanitizeMetadata(record.metadata);
   // Keep a non-sensitive invalid-evidence marker even when URL sanitization had
   // to discard the source string. Null canonical data must not imply NO_WEBSITE.
-  if (text(record.website) && !website) metadata.websiteEvidenceInvalid = true;
+  if (record.website !== null && record.website !== undefined && !(typeof record.website === 'string' && !record.website.trim()) && !website) {
+    metadata.websiteEvidenceInvalid = true;
+    // Structured source values cannot become a canonical URL by guessing. Retain
+    // sanitized candidates for explicit audit review if the adapter omitted them.
+    if (typeof record.website !== 'string' && metadata.website === undefined) metadata.website = sanitizeMetadata({ website: record.website }).website;
+  }
   const provenance = { source, sourceId: record.sourceId, metadata };
   return { warnings, lead: {
     id: randomUUID(), businessName, niche: text(record.niche), country, city: text(record.city), address: text(record.address),

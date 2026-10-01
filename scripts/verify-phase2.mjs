@@ -23,6 +23,13 @@ const html = '<html><head><title>Fixture clinic</title><meta name="viewport" con
 // Only named fixtures are injected; --live-website uses the production DNS/pinned transport.
 const fixtureFetcher = async url => {
   if (url.includes('unreachable-audit.example')) throw new WebsiteFetchError('network', 'Website connection failed.');
+  if (url.includes('long-text-audit.example') || url.includes('desktop-css-audit.example') || url.includes('large-html-audit.example')) {
+    const body = url.includes('long-text-audit.example')
+      ? '<html><head><title>Fixture</title><meta name="viewport" content="width=device-width"></head><body><h1>Fixture</h1><p>' + 'a'.repeat(40000) + '</p></body></html>'
+      : url.includes('large-html-audit.example') ? '<body>' + 'x'.repeat(128 * 1024) + '</body>'
+        : '<html><head><title>Fixture</title><style>@media (min-width:1200px) { .unused { min-width:900px; } }</style></head><body><p>' + 'Fixture text for visitors. '.repeat(8) + '</p><a href="mailto:fixture@clinic.com">Contact us</a></body></html>';
+    return { url, body, status: 200, headers: { 'content-type': 'text/html' }, bytes: Buffer.byteLength(body), durationMs: 100, redirects: 0 };
+  }
   if (url.includes('good-audit.example') || url.includes('poor-audit.example')) {
     const body = url.includes('good-audit.example') ? html : '<html><body>Fixture poor page</body></html>';
     return { url, body, status: 200, headers: { 'content-type': 'text/html' }, bytes: Buffer.byteLength(body), durationMs: 100, redirects: 0 };
@@ -65,13 +72,14 @@ try {
   check((await request(missing.id)).status === 401 && (await request(missing.id, null, {})).status === 401, 'Detail and audit routes require authentication');
   check((await request(missing.id, b)).status === 404 && (await request(missing.id, b, {})).status === 404, 'Foreign lead is invisible to detail and audit endpoints');
   check((await request(missing.id, a, { score: 100 })).status === 400, 'Audit API rejects browser score injection');
-  const cases = [[missing, 'NO_WEBSITE', 65], [await insert(a, 'https://good-audit.example/'), 'ACCEPTABLE_WEBSITE', 5], [await insert(a, 'http://poor-audit.example/'), 'POOR_WEBSITE', 39], [await insert(a, 'https://unreachable-audit.example/'), 'POOR_WEBSITE', 55]];
+  const cases = [[missing, 'NO_WEBSITE', 65], [await insert(a, 'https://good-audit.example/'), 'ACCEPTABLE_WEBSITE', 5], [await insert(a, 'http://poor-audit.example/'), 'POOR_WEBSITE', 39], [await insert(a, 'https://unreachable-audit.example/'), 'POOR_WEBSITE', 55], [await insert(a, 'https://long-text-audit.example/'), 'ACCEPTABLE_WEBSITE', 17], [await insert(a, 'https://desktop-css-audit.example/'), 'ACCEPTABLE_WEBSITE', 17]];
   for (const [lead, classification, score] of cases) {
     checkpoint = 'Authenticated ' + classification + ' audit persistence';
     const audited = await request(lead.id, a, {});
     check(audited.status === 200 && audited.data.lead.classification === classification && audited.data.lead.score === score, checkpoint);
     const read = await a.client.from('leads').select('*').eq('id', lead.id).single();
-    check(!read.error && read.data.owner_id === a.id && read.data.audit.version === 'static-v1' && read.data.score === score && read.data.score_reasons.reduce((sum, reason) => sum + reason.points, 0) === score && read.data.provenance.length === lead.provenance.length, 'Audit JSONB, reasons, owner and source history survive remote reload');
+    check(!read.error && read.data.owner_id === a.id && read.data.audit.version === 'static-v1.1' && read.data.score === score && read.data.score_reasons.reduce((sum, reason) => sum + reason.points, 0) === score && read.data.provenance.length === lead.provenance.length, 'Audit JSONB, reasons, owner and source history survive remote reload');
+    check(read.data.audit.state !== 'reachable' || (read.data.audit.checks.find(item => item.key === 'mobile_width')?.outcome === 'unknown' && !read.data.score_reasons.some(item => item.key === 'mobile_width')), 'Unverified CSS never contributes a mobile failure penalty');
     const forbidden = await b.client.from('leads').update({ audit: {}, score: 100 }).eq('id', lead.id).select('id');
     const foreign = await b.client.from('leads').select('id').eq('id', lead.id);
     check(!forbidden.error && forbidden.data.length === 0 && !foreign.error && foreign.data.length === 0, 'Remote RLS prevents foreign audit read/write');
@@ -83,6 +91,17 @@ try {
   const discarded = await insert(a, '//bad host/?api_key=discarded-fixture');
   const discardedDetail = await request(discarded.id, a);
   check(discardedDetail.data.resolution.invalidCount === 1 && (await request(discarded.id, a, {})).status === 409 && !JSON.stringify(discardedDetail.data).includes('discarded-fixture'), 'Discarded invalid URL evidence remains unclassified without retaining credential values');
+  const malformed = await insert(a, { url: 'https://good-audit.example/' });
+  check((await request(malformed.id, a, {})).status === 409 && (await request(malformed.id, a)).data.lead.classification === null, 'Malformed structured website evidence requires review instead of NO_WEBSITE');
+  const array = await insert(a, ['//good-audit.example/?api_key=array-fixture']);
+  const arrayDetail = await request(array.id, a);
+  check(arrayDetail.data.resolution.candidates[0] === 'https://good-audit.example/' && !JSON.stringify(arrayDetail.data).includes('array-fixture') && (await request(array.id, a, {})).status === 409, 'Sanitized array evidence survives JSONB and requires an explicit website choice');
+  const arrayAudit = await request(array.id, a, { website: 'https://good-audit.example/' });
+  check(arrayAudit.status === 200 && arrayAudit.data.lead.classification === 'ACCEPTABLE_WEBSITE' && arrayAudit.data.lead.audit.evidence.some(item => item.path === 'metadata.website[0]'), 'Explicit array candidate audit persists with source path');
+  await new Promise(resolve => setTimeout(resolve, 5100));
+  const large = await insert(a, 'https://large-html-audit.example/');
+  check((await request(large.id, a, {})).status === 422 && (await request(large.id, a)).data.lead.audit === null, 'Analysis limits leave large HTML unclassified and unscored');
+  await new Promise(resolve => setTimeout(resolve, 5100));
   const conflicted = await insert(a, 'https://good-audit.example/', { source: 'OSM', sourceId: 'node/fixture', metadata: { tags: { website: 'http://poor-audit.example/' } } });
   check((await request(conflicted.id, a, {})).status === 409, 'Unresolved provenance conflict cannot be classified');
   const chosen = await request(conflicted.id, a, { website: 'http://poor-audit.example/' });
