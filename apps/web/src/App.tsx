@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import type { HealthResponse } from '@igetjobs/shared';
 import { supabase } from './lib/supabase';
@@ -44,6 +44,55 @@ function ApiStatus() {
 function AppShell() {
   const location = useLocation();
   const current = navigation.find(item => item.path === location.pathname);
+  const mobileQuery = '(max-width: 760px), (max-width: 960px) and (max-height: 500px)';
+  const [mobile, setMobile] = useState(() => window.matchMedia(mobileQuery).matches);
+  const [drawerLocation, setDrawerLocation] = useState<string | null>(null);
+  const drawerOpen = mobile && drawerLocation === location.key;
+  const sidebarRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const media = window.matchMedia(mobileQuery);
+    const resize = () => { setMobile(media.matches); setDrawerLocation(null); };
+    const close = () => setDrawerLocation(null);
+    media.addEventListener('change', resize);
+    window.addEventListener('popstate', close);
+    return () => { media.removeEventListener('change', resize); window.removeEventListener('popstate', close); };
+  }, []);
+  useLayoutEffect(() => {
+    if (!drawerOpen) return;
+    const sidebar = sidebarRef.current!;
+    const close = closeRef.current!;
+    const menu = menuRef.current;
+    const main = mainRef.current;
+    sidebar.scrollTop = 0;
+    // Focus after the off-canvas visibility change has reached the browser frame.
+    const frame = requestAnimationFrame(() => close.focus({ preventScroll: true }));
+    function keepFocus(event: FocusEvent) {
+      if (!sidebar.contains(event.target as Node)) close.focus({ preventScroll: true });
+    }
+    function keyboard(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); setDrawerLocation(null); }
+      if (event.key !== 'Tab') return;
+      const items = [...sidebar.querySelectorAll<HTMLElement>('a[href],button:not([disabled])')];
+      const first = items[0]!, last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('focusin', keepFocus);
+    document.addEventListener('keydown', keyboard);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('focusin', keepFocus);
+      document.removeEventListener('keydown', keyboard);
+      // Wait until React removes workspace inertness before restoring focus.
+      queueMicrotask(() => {
+        if (!menu?.isConnected) return;
+        (menu.getClientRects().length ? menu : main)?.focus({ preventScroll: true });
+      });
+    };
+  }, [drawerOpen]);
   const [signOutError, setSignOutError] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   async function signOut() {
@@ -53,29 +102,32 @@ function AppShell() {
     catch { setSignOutError(true); }
     finally { setSigningOut(false); }
   }
-  return <div className="app-shell">
-    <a className="skip-link" href="#main">Skip to content</a>
-    <aside className="sidebar">
-      <Link className="brand" to="/" aria-label="iGetJobs dashboard">
+  return <div className={`app-shell${drawerOpen ? ' drawer-is-open' : ''}`}>
+    <a className="skip-link" href="#main" inert={drawerOpen}>Skip to content</a>
+    {drawerOpen && <div className="drawer-backdrop" aria-hidden="true" onClick={() => setDrawerLocation(null)} />}
+    <aside id="workspace-navigation" ref={sidebarRef} className={`sidebar${drawerOpen ? ' drawer-open' : ''}`}
+      role={mobile ? 'dialog' : undefined} aria-label={mobile ? 'Workspace navigation' : undefined}
+      aria-modal={drawerOpen || undefined} aria-hidden={mobile && !drawerOpen || undefined} inert={mobile && !drawerOpen}>
+      <div className="sidebar-heading"><Link className="brand" to="/" aria-label="iGetJobs dashboard" onClick={() => setDrawerLocation(null)}>
         <span className="brand-mark" aria-hidden="true">i</span>
         <span>iGetJobs<span className="brand-subtitle">CLIENT WORKSPACE</span></span>
-      </Link>
+      </Link><button ref={closeRef} className="drawer-close" aria-label="Close navigation" onClick={() => setDrawerLocation(null)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <span className="nav-label">WORKSPACE</span>
       <nav aria-label="Main navigation">
         {navigation.map(item => <NavLink key={item.path} to={item.path} end={item.path === '/'}
-          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} onClick={() => setDrawerLocation(null)}>
           <span className="nav-number" aria-hidden="true">{item.number}</span>{item.label}
         </NavLink>)}
       </nav>
       <div className="sidebar-footer"><span className="phase-dot" aria-hidden="true" />Client workspace</div>
     </aside>
-    <div className="workspace">
+    <div className="workspace" inert={drawerOpen}>
       <header className="topbar">
-        <span><span className="muted">Workspace</span><span className="breadcrumb-divider">/</span>{current?.label || (location.pathname.startsWith('/leads/') ? 'Lead detail' : 'Page not found')}</span>
+        <div className="topbar-location"><button ref={menuRef} className="menu-button" aria-label="Open navigation" aria-controls="workspace-navigation" aria-expanded={drawerOpen} onClick={() => setDrawerLocation(location.key)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button><span><span className="muted breadcrumb-workspace">Workspace</span><span className="breadcrumb-divider">/</span>{current?.label || (location.pathname.startsWith('/leads/') ? 'Lead detail' : 'Page not found')}</span></div>
         <div className="topbar-actions"><ApiStatus /><button className="text-button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? 'Signing out…' : 'Sign out'}</button></div>
       </header>
       <div className="workspace-content">
-        <main id="main" tabIndex={-1}>{signOutError && <p className="form-error" role="alert">Sign-out failed. Please try again.</p>}<Suspense fallback={<p role="status">Loading workspace…</p>}><Outlet /></Suspense></main>
+        <main ref={mainRef} id="main" tabIndex={-1}>{signOutError && <p className="form-error" role="alert">Sign-out failed. Please try again.</p>}<Suspense fallback={<p role="status">Loading workspace…</p>}><Outlet /></Suspense></main>
         <footer className="workspace-footer">Find the right businesses. Build better websites.</footer>
       </div>
     </div>

@@ -2,13 +2,13 @@
 
 ## Current status
 
-Phases 0 and 1 are approved and complete, including all reviewed sanitization, retry and provenance fixes. The user authorized Phase 2 only. Website evidence resolution, safe fetching, deterministic audits, classification, configurable explainable scoring, Supabase assessment persistence, and the Leads/Lead Detail UI are implemented and verified. **Stop for Phase 2 review. Phase 3 has not started.**
+Phases 0 and 1 are approved and complete, including all reviewed sanitization, retry and provenance fixes. The user authorized Phase 2 only. Website evidence resolution, safe fetching, deterministic audits, classification, configurable explainable scoring, Supabase assessment persistence, and the Leads/Lead Detail UI are implemented and verified. The separate responsive correction below replaces horizontal mobile navigation with an accessible off-canvas sidebar. **Stop for Phase 2 review. Phase 3 has not started.**
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
 ## Source of truth and locked scope
 
-SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. SPEC.md and DESIGN.md remain unchanged.
+SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. SPEC.md remains unchanged; DESIGN.md now records the user-authorized permanent responsive navigation rule.
 
 - React + TypeScript, Node.js API, Supabase auth/database, free tiers only.
 - Isolated SerpAPI, OpenStreetMap/Overpass, and manual CSV sources.
@@ -112,6 +112,20 @@ Approved base: 82d60f4cfebcd25a4142b53122f12a2f6b0904f4. No new migration or RLS
 
 Phase 2 file groups: new API audit engine/policy/pinned fetcher/service/routes; website evidence/safety and discovery assessment invalidation/invalid-evidence marker; shared audit contracts; Leads/detail/assessment components/styles/routing; audit regression tests/live verifier; npm manifests/lockfile, API env example, README and PROJECT_STATE.md.
 
+## Responsive shell correction — 2026-10-01
+
+Reviewed base: f0f80f537b0b5dc8cd25e4802f1fa2c0137b34d4. This separate UI correction supersedes earlier horizontal mobile/short-landscape navigation behavior; it does not begin Phase 3.
+
+- Desktop/tablet retains the fixed vertical left sidebar and top bar. Only workspace-content normally scrolls. Short desktop spacing stays vertical and compact.
+- Mobile uses the same sidebar hidden off-canvas, accessed through a labeled top-bar menu button. Close button, backdrop, navigation selection, Escape and browser history close it. Hidden navigation is inert; the open drawer traps focus, marks the background inert, locks workspace scrolling and restores focus on closing. Resizing to desktop restores focus to main content.
+- Short mobile drawers permit bounded vertical scrolling for all navigation/footer access, with the close control kept visible. The workspace scrollbar is hidden while the drawer is open, so only one scroll area is active. Reduced motion is respected. No horizontal mobile navbar remains.
+- DESIGN.md and README.md record the permanent desktop/tablet-sidebar and mobile-drawer rule. Current boundary: up to 760px wide, or up to 960px wide with height up to 500px for phone landscape.
+- Browser verification: 1280×720 desktop, 768×1024 and 1024×768 tablets, 390×844 and 320×740 mobile portrait, 844×320 and 320×320 mobile landscape, and 1280×320 short desktop. No document/horizontal overflow; fixed top bar/sidebar while workspace scrolls; all navigation/footer accessible; no duplicate active scrollbars.
+- Browser verification covers initial close-button focus, Tab/Shift+Tab containment, Escape/close/backdrop/navigation/history closure, resize focus recovery, and background scroll lock. Authenticated Search, Leads and Lead Detail still render; a disposable missing-website audit saved/reloaded classification, score 65, reasons and evidence. Only generated browser fixtures were cleaned up.
+- npm run check: PASS — all 39 tests, zero-warning lint, typecheck including tests, shared/API/web production builds. Vite reports its non-blocking main-chunk size advisory (approximately 500KB); no new dependency is introduced.
+- Secret scan: PASS — local configuration values absent from publishable files and Git file history; private/test credentials absent from web output. Env/build/test artifacts remain ignored.
+- Changed files: apps/web/src/App.tsx, apps/web/src/styles.css, DESIGN.md, README.md and PROJECT_STATE.md. No backend, schema, auth policy, discovery or audit-engine change. Phase 2 review is pending.
+
 ## Earlier Phase 0/1 changed file groups
 
 - apps/api/src/auth.ts and app/env/index/Supabase setup: verified authentication, safe routing/configuration/transport.
@@ -143,6 +157,8 @@ Separate review-fix commit message: fix: harden Phase 1 URLs, save retries, and 
 Separate protocol-relative fix commit message: fix: sanitize protocol-relative URLs in lead provenance. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 2.
 
 Phase 2 commit message: feat: implement safe website audits and explainable scoring. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 3.
+
+Separate responsive correction commit message: fix: use an accessible off-canvas sidebar on mobile. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for Phase 2 review before Phase 3.
 
 At every future completed phase: run tests/lint/typecheck/build, review against SPEC.md, update state and limitations, commit separately, push and confirm SHA/status, then stop for review. Do not start the next phase without approval.
 

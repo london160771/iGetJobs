@@ -193,8 +193,15 @@ Priority should derive from score thresholds, not separate hidden logic.
 ## Responsive behavior
 Desktop is primary.
 
-On smaller screens:
-- sidebar may collapse
+Permanent responsive navigation rule:
+- Desktop/tablet: keep the normal fixed left sidebar and fixed workspace top bar. Only the main workspace/outlet scrolls.
+- Mobile: hide the same vertical sidebar off-canvas by default. A labeled menu button in the top bar opens a slide-out drawer from the left with a backdrop.
+- Never convert mobile navigation into a horizontal navbar.
+- Close the drawer through its close button, backdrop, navigation selection, or Escape. Move focus into it on opening, contain keyboard focus while open, and restore focus on closing. Hidden navigation and the background workspace must not be interactive.
+- Lock background workspace scrolling while open. On short screens the drawer may scroll so every navigation item and its footer remain accessible; only one scroll area is active at a time.
+- Current responsive boundary: widths up to 760px, or short landscape up to 960px wide and 500px high, use the mobile drawer. Normal tablet portrait/landscape retains the left sidebar. Short desktop sidebars stay vertical with compact spacing.
+
+Other smaller-screen behavior:
 - tables may become stacked cards
 - filters may become a drawer/sheet
 - critical actions must remain accessible

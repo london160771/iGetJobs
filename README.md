@@ -174,6 +174,6 @@ scripts/             Safe live Supabase, Phase 1 and Phase 2 verification
 tests/               Foundation, discovery, audit/security, PostgreSQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. The workspace uses a viewport-fixed shell, fixed navigation/top bar, and one scrolling content outlet. Short landscape navigation remains accessible; mobile navigation wraps. Phase 2 detail supports audits only; management, pipeline editing, filters, dashboard metrics and outreach remain their later phases.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet uses a fixed left sidebar and top bar with one scrolling content outlet. Mobile uses the same vertical sidebar in a hidden off-canvas drawer, opened by the top-bar menu button; never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains and restores keyboard focus, and locks background scrolling. On short screens only the open drawer scrolls to keep navigation and its footer accessible. Phase 2 detail supports audits only; management, pipeline editing, filters, dashboard metrics and outreach remain their later phases.
 
 Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish each approved phase with checks, state update, separate commit/push, and review before proceeding. React, Node.js, Supabase, free tiers. No Next.js, MongoDB, AI, Hunter integration yet, automatic outreach, paid dependency, or V2 features.
