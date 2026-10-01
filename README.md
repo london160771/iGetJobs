@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Phases 1 and 2 implemented:** authenticated discovery, conservative duplicate review, Supabase persistence, safe website auditing, deterministic classification, and explainable scoring. New leads remain unclassified and unscored until an audit completes. Stop for review before Phase 3 lead management.
+**Phases 1–3 implemented:** authenticated discovery, conservative duplicate review, Supabase persistence, safe website auditing, deterministic classification/scoring, and lead management. New leads remain unclassified and unscored until an audit completes. Stop for Phase 3 review before Phase 4 outreach drafts.
 
 ## Local setup
 
@@ -36,6 +36,8 @@ Run `supabase/migrations/202610010001_auth_and_leads.sql` once through the proje
 
 The migration creates V1 `leads` and `user_settings`, owner defaults referencing Auth users, enabled/forced owner-only RLS for all CRUD, no anonymous table grants, timestamps, constraints, and non-unique comparison indexes. Shared domains/phones can represent different branches. Credentials are not stored in these tables.
 
+Then apply `supabase/migrations/202610010002_lead_management.sql` once. It adds a bounded database-generated activity trail and an atomic assessment invalidation trigger. **Both migrations are already applied to the current project; do not rerun them.** No new table, privileged app credential, or ownership-policy change is needed.
+
 Use a confirmed email/password account at `/login`. All workspace routes require an Auth-verified session, including restored sessions. The top bar signs out locally. The Node API independently verifies every protected bearer token with Supabase Auth and uses that token for database operations. `/api/health` reports API availability/configuration only; it does not prove a live database connection.
 
 ## Discovery workflow
@@ -44,7 +46,7 @@ Use a confirmed email/password account at `/login`. All workspace routes require
 2. Find leads or upload a CSV to create a preview. Nothing is saved automatically.
 3. Review location, contact information, source notes, and duplicate evidence. A missing source website is not an audit or a classification.
 4. Select up to 50 results and save. Failures are reported per row; retrying the same preview does not repeat completed saves. Owner-scoped lookup by the server-created preview lead ID also reconciles an insert that committed before its response was lost; retry returns the existing lead without overwriting it.
-5. Open Saved leads to reload the latest 100 records from Supabase. Inspect a lead's website evidence, run its audit, and review the classification, numeric score, priority, reasons, and checks. Management, filters, and outreach remain later phases.
+5. Open Leads to filter/sort the owner collection, inspect evidence, run audits, and manage notes, pipeline status and follow-ups. Outreach drafts remain Phase 4.
 
 Each source has an isolated adapter. Normalization trims text, normalizes domains/HTTP(S) URLs, validates E.164 phones using the country, normalizes email/country, and bounds ratings/review counts. Invalid contacts become null with visible warnings, while original source fields remain in provenance. Source/sourceId, raw OSM tags, SerpAPI record fields, and CSV columns/row numbers are retained, subject to credential sanitization. Website/social and metadata URLs share sanitization: userinfo is rejected in canonical contacts, metadata userinfo is stripped, fragments and unknown query parameters are removed. Only bounded `page` numbers and validated `lang`/`locale` selectors survive because they select pagination or language without accepting arbitrary secret values. Credential-shaped metadata fields are removed. Oversized metadata records are skipped with a source note.
 
@@ -101,7 +103,17 @@ Default configurable points:
 
 The last three are recorded source indicators, not independently verified facts. The existing `mobile_width` policy key is retained for configuration compatibility but contributes zero while its outcome is unknown. Score is the sum of reasons capped at 100; a cap adjustment is visible. A zero score has a zero-point explanation. High priority starts at 70, Medium at 40, Low below 40. Classification uses quality penalties only, not source/contact bonuses. Every audit stores its policy, choice, evidence, checks, metrics, timestamp, classification reasons and score reasons in existing Supabase columns; no new migration is needed.
 
-Phase 3 requirement: management edits changing website/domain, linked evidence/source identifiers, phone/email, rating or review count must atomically clear `audit`, `classification`, `score` and `score_reasons` in the same owner/timestamp-guarded update. Reaudit before presenting these derived values as current. Preserve the existing identical-link behavior. Management editing remains unimplemented until Phase 3 is approved.
+Management edits changing evidence/scoring inputs atomically clear `audit`, `classification`, `score` and `score_reasons`. The API uses owner/ID/last-loaded-timestamp guards; a database trigger also enforces invalidation for direct authenticated writes. Business name, niche/location/address, website/domain, contacts/socials, source/provenance, rating and review count are guarded conservatively. Notes, pipeline status and follow-up changes retain an unchanged assessment. Identical provenance links still retain it. Reaudit before presenting invalidated derived values as current.
+
+## Lead management
+
+Leads shows business, niche, location, classification, numeric score, priority, pipeline stage, source and update date. Desktop uses a table; smaller workspaces use labeled cards. Expand Filter leads for niche, country/city, classification (including unaudited), score bounds, priority, stage, source and email/phone presence. Sort by score, creation date, update date or name. Filters/sort/page remain in the URL and can be cleared. Null scores sort last and do not count as zero in numeric filters. Priority uses the scoring thresholds recorded in each audit.
+
+The owner collection is read in bounded database pages, then filtered/sorted consistently before 25-row UI pagination. Management supports up to 2,000 owner records, matching the discovery duplicate-check limit; exceeding it fails explicitly instead of showing truncated counts. The legacy discovery `/api/leads` read remains latest-100 for compatibility. Dashboard counts cover the complete supported owner collection and link to the corresponding filters. Stage counts are current stages, not cumulative historical conversions.
+
+Lead Detail supports saved notes (10,000-character limit), exactly the seven approved manual pipeline stages, follow-up dates, business/contact corrections, source/provenance and the latest 100 recorded state changes. Follow-up is a calendar date; UI writes noon UTC and labels the date overdue/today/upcoming against the local calendar day. Clearing it stores null. No outreach is sent. Source history is preserved; clearing the canonical website cannot erase linked website evidence.
+
+Save changes explicitly; unsaved form changes block auditing until saved/discarded. A stale or uncertain management response keeps the form visible, hides the possibly stale assessment, and requires an explicit reload before further writes. Reload/discard is labeled when edits would be lost. Activity records field names, stage/date transitions and audit/invalidation events, never old note/contact values. It is generated in the same database transaction, cannot be replaced by API/client-supplied history, and does not reconstruct changes made before the migration.
 
 To tune weights, set a **complete** `AUDIT_SCORING_JSON` policy in the ignored API env, then restart. Defaults are in `apps/api/src/audit/policy.ts`; the following is a non-secret example of the full shape (use compact JSON as an env value):
 
@@ -150,6 +162,8 @@ npm run verify:phase1 -- --live-source
 npm run verify:phase2
 # Also one real public HTTPS audit using the production pinned transport:
 npm run verify:phase2 -- --live-website
+# Phase 3 persistence, filters/counts, state changes, invalidation, activity and isolation
+npm run verify:phase3
 ```
 
 Live verifiers use two **confirmed, disposable** Auth accounts configured in ignored root `.env` through `SUPABASE_TEST_EMAIL_A`, `SUPABASE_TEST_PASSWORD_A`, `SUPABASE_TEST_EMAIL_B`, and `SUPABASE_TEST_PASSWORD_B`. Do not print/paste/commit their values. Accounts must have no existing `user_settings` row for the prerequisite verifier. Missing setup fails rather than being skipped. Verifiers remove only their generated test rows and end their non-persisted sessions.
@@ -158,7 +172,9 @@ Live verifiers use two **confirmed, disposable** Auth accounts configured in ign
 
 `verify:phase2` uses explicitly injected HTML fixtures for predictable classification, then verifies real Auth/API/JSONB persistence, cross-user denial, evidence choices, cooldown and stale-write rejection. Its live-website option additionally fetches `https://example.com/` through the actual validated, pinned HTTPS transport. Only generated records are cleaned up. Fixtures do not claim to be live business audit measurements.
 
-Unit tests execute the unchanged migration in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. They complement remote checks; the app uses only Supabase for persistence. Tests also cover measured audit/classification/scoring math, repeat determinism, missing/conflicting evidence, response/deadline limits, private redirects, DNS rebinding, stale/source-changed assessments, Phase 1 normalization/transports/quotas/CSV/dedupe/retries, and safe Auth/API errors.
+`verify:phase3` signs in both disposable accounts and runs the built management/audit API on an ephemeral loopback port. It checks collection pagination, all filter dimensions, sorting, owner-only dashboard counts, seven persisted stages, notes/follow-up changes and clearing, unchanged assessment retention, stale/injected/foreign write rejection, remote JSONB history, URL sanitization and API/database-level invalidation. Only its generated fixture IDs are removed; an ignored UUID-only recovery journal supports interrupted cleanup.
+
+Unit tests execute both actual migrations in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. Test files run sequentially so database-engine startup cannot contend with strict HTML worker deadlines; runtime safety limits are unchanged. They complement remote checks; the app uses only Supabase for persistence. Tests cover filters/sorting/counts, notes/status/follow-up/history, assessment invalidation, owner/timestamp guards, audit/classification/scoring determinism, evidence, SSRF/redirect/rebinding/bounds, discovery/CSV/dedupe/retries/quotas and safe Auth/API errors.
 
 Build order: shared contracts → API → web. Outputs: `packages/shared/dist`, `apps/api/dist`, `apps/web/dist`. After building, production smoke tests can use two terminals:
 
@@ -172,14 +188,14 @@ Web preview is http://127.0.0.1:4173 with the local API proxy. A real deployment
 ## Structure and phase boundary
 
 ```text
-apps/web/            React/TypeScript shell, login, Search, saved collection and audit detail
-apps/api/            Express API, auth, discovery, quota guard, safe audit/scoring, persistence
-packages/shared/     Normalized Lead and API/discovery/audit contracts
-supabase/migrations/ V1 schema and owner policies
-scripts/             Safe live Supabase, Phase 1 and Phase 2 verification
-tests/               Foundation, discovery, audit/security, PostgreSQL RLS tests
+apps/web/            React shell, login, Search, management table/detail and dashboard
+apps/api/            Express auth/discovery/audit/management APIs and persistence
+packages/shared/     Lead/API contracts, management filters/sorting/counts
+supabase/migrations/ V1 schema, owner policies, atomic history/invalidation guard
+scripts/             Safe live Supabase and Phases 1–3 verification
+tests/               Foundation, discovery, audit/security, management and SQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet uses a fixed left sidebar and top bar with one scrolling content outlet. Mobile uses the same vertical sidebar in a hidden off-canvas drawer, opened by the top-bar menu button; never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains and restores keyboard focus, and locks background scrolling. On short screens only the open drawer scrolls to keep navigation and its footer accessible. Phase 2 detail supports audits only; management, pipeline editing, filters, dashboard metrics and outreach remain their later phases.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet uses a fixed left sidebar and top bar with one scrolling content outlet. Mobile uses the same vertical sidebar in a hidden off-canvas drawer, opened by the top-bar menu button; never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains and restores keyboard focus, and locks background scrolling. On short screens only the open drawer scrolls to keep navigation and its footer accessible. Phase 3 adds management and dashboard counts; outreach drafts remain unimplemented until Phase 4 approval.
 
 Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish each approved phase with checks, state update, separate commit/push, and review before proceeding. React, Node.js, Supabase, free tiers. No Next.js, MongoDB, AI, Hunter integration yet, automatic outreach, paid dependency, or V2 features.

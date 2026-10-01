@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const session = await supabase?.auth.getSession();
   const token = session?.data.session?.access_token;
@@ -11,6 +14,6 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   let data: T & { error?: string };
   try { data = await response.json() as T & { error?: string }; }
   catch { throw new Error('The API returned an unexpected response.'); }
-  if (!response.ok) throw new Error(data.error || 'This request could not be completed.');
+  if (!response.ok) throw new ApiRequestError(data.error || 'This request could not be completed.', response.status);
   return data;
 }

@@ -8,6 +8,7 @@ import { PageHeader, EmptyState } from './components';
 const Search = lazy(async () => ({ default: (await import('./Search')).Search }));
 const Leads = lazy(async () => ({ default: (await import('./Leads')).Leads }));
 const LeadDetail = lazy(async () => ({ default: (await import('./LeadDetail')).LeadDetail }));
+const Dashboard = lazy(async () => ({ default: (await import('./Dashboard')).Dashboard }));
 
 const navigation = [
   { path: '/', label: 'Dashboard', number: '01' },
@@ -132,19 +133,6 @@ function AppShell() {
       </div>
     </div>
   </div>;
-}
-
-function Dashboard() {
-  return <>
-    <PageHeader title="A place for your next opportunity." description="Keep local businesses, website opportunities, and conversations together." />
-    <div className="section-heading"><h2>Lead workspace</h2><span className="tag">Discovery ready</span></div>
-    <EmptyState title="Your workspace starts here">
-      <p>Search local businesses or import your own CSV, review matches, and save selected leads.</p>
-      <p>Every result stays unscored until a measurable audit is performed.</p>
-      <Link className="button" to="/search">Find leads <span aria-hidden="true">→</span></Link>
-    </EmptyState>
-    <div className="workspace-note"><span className="note-label">BUILT FOR FOCUS</span><p>Discover. Review. Reach out personally.</p><span className="muted">A simple workflow for your next client.</span></div>
-  </>;
 }
 
 function PlaceholderPage({ title, description, emptyTitle, detail }: {

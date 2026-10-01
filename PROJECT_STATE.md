@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 0 and 1 are approved and complete, including all reviewed sanitization, retry and provenance fixes. The user authorized Phase 2 only. Website evidence resolution, safe fetching, deterministic audits, classification, configurable explainable scoring, Supabase assessment persistence, and the Leads/Lead Detail UI are implemented and verified. The separate responsive correction below replaces horizontal mobile navigation with an accessible off-canvas sidebar. Phase 2 review fixes now bound/isolate HTML analysis, preserve malformed website evidence for review, and remove unverified CSS penalties. **Stop for Phase 2 review. Phase 3 has not started.**
+Phases 0–2 are approved and complete, including all reviewed fixes. The user authorized Phase 3 only. Lead management now includes a responsive table/cards, filters, sorting, pagination, notes, seven manual pipeline stages, follow-up dates, source/activity detail, guarded contact corrections and dashboard counts. Assessment invalidation is enforced atomically in both API updates and the database; stale/uncertain saves require reload and hide potentially stale results. **Stop for Phase 3 review. Phase 4 has not started.**
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
@@ -14,7 +14,7 @@ SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. S
 - Isolated SerpAPI, OpenStreetMap/Overpass, and manual CSV sources.
 - Configurable US/GB/CA/AU markets and all nine starter niches.
 - No Next.js, MongoDB, AI, paid requirement, Hunter integration yet, automatic outreach/calling, CRM, or V2 features.
-- Phase 2 adds audits/classification/scoring only. New leads still have null audit/classification/score/draft and status New. Management, filters, pipeline editing, dashboard counts and outreach remain Phases 3 and 4.
+- New discovery leads still have null audit/classification/score/draft and status New. Phase 3 adds management only; outreach drafts remain Phase 4. Discovery adapters and the audit/fetching/scoring engine are preserved.
 
 ## Approved Phase 0 history
 
@@ -141,6 +141,25 @@ Reviewed base: 4514d2fc87e8b801c8b70584d4bf4e409920101d (Phase 2 implementation 
 - Secret scan: PASS — local configuration absent from publishable files/Git file history; test/private credentials absent from web output; env/build/usage/test artifacts remain ignored. No secret values are printed. The unchanged web build retains its non-blocking approximately 500KB chunk-size advisory.
 - Changed files: API audit engine/new bounded HTML worker, website-safety evidence resolver, discovery normalization, audit regression tests, live Phase 2 verifier, README.md and PROJECT_STATE.md. The responsive drawer and Phase 1 discovery behavior remain unchanged.
 
+## Completed Phase 3 — 2026-10-01
+
+Approved base: 60d06eba7af8f96f99c76fb44841ce60c78e4974. The user approved Phase 2 and authorized Phase 3 lead management only.
+
+- The user applied supabase/migrations/202610010002_lead_management.sql. It adds a bounded activity JSONB column and a non-privileged before-write trigger; existing enabled/forced owner RLS and ownership policies remain intact. No new app dependency or table is added.
+- Auth-verified management routes use per-user public/JWT Supabase clients. Collection reads exclude raw provenance/notes/history, read database pages completely up to 2,000 owner records, then apply validated filters and stable sorting before 25-row UI pagination. Above the cap the API fails explicitly; dashboard counts never silently use latest-100 data. The discovery compatibility read is unchanged.
+- Filters: niche, country, city, classification/unaudited, inclusive score range, priority, pipeline status, source and email/phone presence. Null scores are excluded from numeric ranges and sort last. Priority uses each assessment's saved policy. Sorting: score ascending/descending, newest/oldest, updated and case-normalized name, with ID tie-breaking. Filters/sort/page persist in the URL and have a clear action.
+- Desktop Leads uses all nine requested columns; smaller workspaces use labeled cards with overdue/today/upcoming follow-ups. Lead Detail preserves audits/reasons and adds explicit save/discard forms for notes (10,000 characters), exact approved stages, follow-up set/change/clear, and validated business/contact corrections. It exposes preserved source IDs/metadata and the last 100 actual state changes. Audit controls are disabled while management edits are unsaved.
+- Writes whitelist management fields, normalize/reject malformed contacts, derive the canonical domain, sanitize credential URLs, and require the last-loaded timestamp. Owner/ID/timestamp guards reject stale writes. Evidence/scoring changes clear audit, classification, score and reasons in the same write. The database guard also clears these fields for direct authenticated input edits, even if a client tries to submit a retained/forged assessment. Notes/status/follow-up-only edits retain unchanged assessments; identical provenance linking still retains them.
+- The database generates field-name/stage/date/audit/invalidation history atomically; client history cannot replace it. It contains no note/contact value copies and caps the trail at 100 events. Created time remains visible; history before the migration is unavailable. Stale/uncertain management responses retain the visible form, hide the assessment and require reload before further writes; validation errors remain correctable. Reload/discard is explicit.
+- Dashboard counts cover the complete supported owner collection: total, Qualified, NO_WEBSITE, POOR_WEBSITE, Contacted, Replied, Call Booked and Closed. Cards link to matching filters; stage counts represent the current stage. Empty/loading/error/retry and save success states are implemented without outreach, automation or analytics expansion.
+- npm run check: PASS — 54 tests, zero-warning lint, typecheck including tests and shared/API/web production builds. Seven new tests cover combined filters/nulls, sorting/custom priority, counts/calendar follow-ups, validation/invalidation/no-op edits, 130-row pagination, owner/timestamp repository guards and both actual migrations with SQL RLS/history/direct invalidation bounds.
+- Test files run sequentially: concurrently initializing two PGlite engines could starve the unchanged five-second HTML worker startup limit in a loaded local run. Serialization removes that test resource contention without increasing production deadlines or dropping any regression.
+- npm run verify:phase3: PASS — real Auth for both accounts, applied schema, complete/paginated owner collections, all filter dimensions, live counts, seven persisted stages, notes/follow-up changes and clearing, remote activity JSONB, unchanged audit retention, stale/foreign/derived-field rejection, sanitized website correction, and API/database-level invalidation. Disposable generated IDs are cleaned up.
+- npm run verify:supabase, npm run verify:phase2 -- --live-website, and npm run verify:phase1 -- --live-source: PASS after the migration. Remote Auth/RLS/persistence, pinned HTTPS, evidence/worker/CSS/scoring/stale-link regressions, CSV/lost-response/provenance/dedupe and live OSM discovery/cache/save remain working. OSM returned 24 normalized businesses; only generated verifier rows were removed.
+- Browser: filters and score sorting, notes/status/follow-up save/reload, immediate assessment clearing after website correction, real example.com reaudit, source/activity display, stale form rejection/assessment hiding/reload recovery, dashboard counts, and desktop/mobile layout/scrolling verified. Drawer focus/Shift+Tab trapping/Escape restoration, backdrop/navigation closure, workspace lock and short-landscape footer access verified. Fixtures/screenshots remain ignored and disposable browser leads are cleaned up.
+- Secret scan: PASS — actual local configuration values absent from publishable source and Git history; test/private credentials absent from production web output; env/usage/build/verifier artifacts ignored. The existing approximately 500KB Vite chunk advisory remains non-blocking.
+- Changed file groups: management API/wiring, shared contracts/query helpers, Leads/dashboard/detail/forms/API error helper/styles, new SQL migration, management regression tests/live verifier, package script, README and PROJECT_STATE.md. App shell/drawer behavior, discovery/audit implementation, SPEC.md, DESIGN.md and PLAN.md are unchanged.
+
 ## Earlier Phase 0/1 changed file groups
 
 - apps/api/src/auth.ts and app/env/index/Supabase setup: verified authentication, safe routing/configuration/transport.
@@ -153,17 +172,17 @@ Reviewed base: 4514d2fc87e8b801c8b70584d4bf4e409920101d (Phase 2 implementation 
 - scripts/verify-supabase.mjs and scripts/verify-phase1.mjs: safe live checks and test-row cleanup.
 - Root/workspace env examples, .gitignore, README, npm manifests/lockfile, lint configuration, and this state.
 
-## Limitations and Phase 3 handoff
+## Limitations and Phase 4 handoff
 
-Phase 1 and its review fixes are approved; Phase 2 review is pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. OSM satisfies the one-live-source criterion. Verify live SerpAPI before enabling/relying on it.
+Phases 0–2 are approved; Phase 3 review is pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. OSM satisfies the one-live-source criterion. Verify live SerpAPI before enabling/relying on it.
 
 This personal architecture uses one API process. Persist .local/provider-usage.json across restarts; do not reset it to bypass caps. Previews/cache/locks are process-local and do not support replicas. A preview expires after 30 minutes or API restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate reads 2,000 owner records, saved read view latest 100, history 100 provenance records/lead. Failures are explicit; uncertain records never silently merge. OSM coverage/bounding boxes require relevance review.
 
 Phase 2 uses static HTML, not a rendered browser audit. JavaScript-only pages, external CSS visibility, actual CTA behavior, external broken links and complete mobile/performance behavior remain unverified. Compression, unsupported content and access restrictions may require manual review; no score is invented for incomplete audits. Address rules deliberately reject some public special-purpose exceptions. Only the first approved IP is tried, without automatic retries. Results reflect the measured snapshot and may change with real page/DNS/timing changes. Previously discarded invalid source strings cannot be reconstructed; import corrected evidence when historical source data is incomplete.
 
-Preserve safety in later phases: use provenance before NO_WEBSITE; pin validated IPs, preserve Host/TLS checks, disable automatic redirects, revalidate/repin every hop, keep bounds and rebinding/private-redirect tests. Do not bypass the pinned transport or execute page assets. Keep classifications/scoring deterministic and explicit. Phase 3 requires review approval; management/outreach remain their approved later phases.
+Preserve safety in later phases: use provenance before NO_WEBSITE; pin validated IPs, preserve Host/TLS checks, disable automatic redirects, revalidate/repin every hop, keep bounds and rebinding/private-redirect tests. Do not bypass the pinned transport or execute page assets. Keep classifications/scoring deterministic and explicit. Phase 4 requires approval; outreach remains unimplemented.
 
-Mandatory Phase 3 rule: management edits changing website/domain, provenance/source identifiers, phone/email, rating or review count must atomically clear audit, classification, score and score_reasons in the same owner/timestamp-guarded update. Reaudit before presenting these derived values as current; preserve identical-link behavior. Implement and test this alongside future management edits, after Phase 3 approval. HTML analysis bounds and CSS-unknown behavior must remain intact.
+Mandatory invalidation is implemented and verified in Phase 3. Preserve the owner/timestamp guards and database trigger for future edits; reaudit before presenting invalidated values as current. Notes/status/follow-up retain unchanged assessments and identical links remain idempotent. HTML analysis bounds and CSS-unknown behavior must remain intact. Management/counts cap at 2,000 owner records; legacy discovery reads remain latest-100. Activity retains the latest 100 events, not an unlimited history. Follow-up is a calendar date; no reminders or automatic sending are implemented.
 
 ## Publication and mandatory workflow
 
@@ -180,6 +199,8 @@ Separate responsive correction commit message: fix: use an accessible off-canvas
 Separate Phase 2 review-fix commit message: fix: bound audit analysis and preserve uncertain website evidence. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for Phase 2 review before Phase 3.
 
 At every future completed phase: run tests/lint/typecheck/build, review against SPEC.md, update state and limitations, commit separately, push and confirm SHA/status, then stop for review. Do not start the next phase without approval.
+
+Phase 3 commit message: feat: implement owner-scoped lead management. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 4.
 
 ## Last updated
 

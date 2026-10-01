@@ -1,4 +1,6 @@
 /** Shared V1 contracts. */
+export * from './management.js';
+import type { LeadActivity } from './management.js';
 export type LeadSource = 'SERPAPI' | 'OSM' | 'CSV';
 export type LeadClassification = 'NO_WEBSITE' | 'POOR_WEBSITE' | 'ACCEPTABLE_WEBSITE';
 export type LeadStatus = 'New' | 'Qualified' | 'Contacted' | 'Replied' | 'Call Booked' | 'Closed' | 'Lost';
@@ -95,6 +97,8 @@ export interface Lead extends LeadProvenance {
   status: LeadStatus;
   notes: string;
   followUpAt: IsoDateTime | null;
+  /** Database-generated, bounded management/audit history. Legacy rows may omit it. */
+  activity?: LeadActivity[];
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
 }
