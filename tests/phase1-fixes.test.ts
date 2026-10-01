@@ -26,6 +26,47 @@ test('normalization removes credentials from canonical/social/metadata URLs, inc
   assert.deepEqual(sanitizeMetadata({ website: 'user:private-marker@example.com/?token=private-marker', international: 'bücher.de/?api_key=private-marker', email: 'person@example.com' }), { website: 'https://example.com/', international: 'https://xn--bcher-kva.de/', email: 'person@example.com' });
 });
 
+test('protocol-relative contacts and nested provenance use the same filtering as absolute URLs', () => {
+  const params = ['api_key', '%61ccess_token', 'token', 'key', 'secret', 'auth', 'password', 'unknown_credential'];
+  const raw = '//example.com/contact?' + params.map(key => key + '=relative-credential-marker').join('&') + '&page=2&lang=en-GB#token=relative-credential-marker';
+  const expected = 'https://example.com/contact?page=2&lang=en-GB';
+  const metadata = { website: '  ' + raw + '  ', nested: [{ social: raw, extra: 'preserved' }] };
+  assert.deepEqual(sanitizeMetadata(metadata), { website: expected, nested: [{ social: expected, extra: 'preserved' }] });
+  assert.deepEqual(sanitizeMetadata({ url: raw }), sanitizeMetadata({ url: 'https:' + raw }));
+  const lead = normalizeLead({ businessName: 'Relative Dental', website: raw, socials: { facebook: raw }, sourceId: 'relative-source', metadata }, 'CSV').lead;
+  assert.equal(lead.website, expected); assert.equal(lead.socials.facebook, expected);
+  assert.equal(lead.sourceId, 'relative-source');
+  assert.equal(JSON.stringify(lead).includes('relative-credential-marker'), false);
+  assert.deepEqual(sanitizeMetadata({ credentialed: '//user:relative-credential-marker@example.com/?token=relative-credential-marker&locale=fr', malformed: '//bad host/?key=relative-credential-marker' }), { credentialed: 'https://example.com/?locale=fr', malformed: null });
+  assert.equal(websiteUrl('//user:relative-credential-marker@example.com/'), null);
+});
+
+test('CSV protocol-relative URLs remain sanitized through preview, save, and reload with safe provenance intact', async () => {
+  const rows: Lead[] = [];
+  const repository: LeadRepository = {
+    identities: async () => structuredClone(rows), list: async () => structuredClone(rows),
+    findById: async id => structuredClone(rows.find(row => row.id === id) || null),
+    insert: async lead => { rows.push(structuredClone(lead)); return structuredClone(lead); },
+    link: async () => { throw new Error('Unexpected source link'); }
+  };
+  const service = new DiscoveryService({}, () => repository, new ProviderGuard({ load: async () => ({}), save: async () => {} }));
+  const csv = 'name,website,facebook,extra\nRelative Dental,//example.com/?api_key=relative-credential-marker&lang=en,//facebook.com/relative?token=relative-credential-marker&page=2,preserved';
+  const preview = await service.importCsv('A', 'token', { csv, filename: 'relative.csv' });
+  const lead = preview.rows[0]!.lead;
+  assert.equal(JSON.stringify(preview).includes('relative-credential-marker'), false);
+  assert.equal(lead.website, 'https://example.com/?lang=en');
+  assert.equal(lead.socials.facebook, 'https://facebook.com/relative?page=2');
+  const metadata = lead.provenance[0]!.metadata!;
+  assert.deepEqual(metadata.fields, { name: 'Relative Dental', website: lead.website, facebook: lead.socials.facebook, extra: 'preserved' });
+  assert.equal(metadata.filename, 'relative.csv'); assert.equal(metadata.rowNumber, 2);
+  const saved = await service.save('A', 'token', { previewId: preview.id, selections: [{ id: lead.id, action: 'save' }] });
+  assert.equal(saved.results[0]?.status, 'saved');
+  const reloaded = await service.list('A', 'token');
+  assert.deepEqual(reloaded[0]?.provenance, lead.provenance);
+  assert.equal(JSON.stringify(leadToRow(reloaded[0]!, 'A')).includes('relative-credential-marker'), false);
+  assert.equal(reloaded[0]?.sourceId, lead.sourceId);
+});
+
 test('lost insert responses reconcile by owner + server preview ID without duplicate inserts, including separate saves', async () => {
   for (const action of ['save', 'separate'] as const) {
     const rows = new Map<string, Lead[]>(); let inserts = 0;

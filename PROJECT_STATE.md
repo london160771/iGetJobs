@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 0 is approved and complete. Phase 1 discovery/ingestion, its Supabase prerequisites, and the three requested Phase 1 review fixes are implemented and verified. Stop for review of this separate fix commit. **Phase 2 has not started and requires approval.**
+Phase 0 is approved and complete. Phase 1 discovery/ingestion, its Supabase prerequisites, and the requested review fixes, including protocol-relative provenance URL sanitization, are implemented and verified. Stop for review of this separate sanitization fix commit. **Phase 2 has not started and requires approval.**
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
@@ -50,7 +50,7 @@ SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. S
 
 ## Validation — 2026-10-01
 
-- npm run check: PASS — lint with zero warnings, TypeScript including tests, 22 tests, production shared/API/web builds.
+- npm run check: PASS — lint with zero warnings, TypeScript including tests, 24 tests, production shared/API/web builds.
 - Tests cover normalization/provenance, malformed/oversized CSV, Nominatim city restriction/cache, OSM/SerpAPI mapping, free-plan/quota guards, provider cache/persisted reservations/failure handling, conservative duplicates, preview ownership/mass assignment/retries, explicit source links, Auth guards, safe 400/413/API errors, and actual PostgreSQL migration/RLS enforcement through development-only PGlite.
 - npm run verify:supabase: PASS remotely for both accounts/tables, including persistence and all cross-user/anonymous/ownership checks. Disposable records cleaned up.
 - npm run verify:phase1 -- --live-source: PASS with the built API. CSV preview/save/reload, cross-user preview rejection/RLS isolation, retry protection, exact duplicate review, explicit provenance linking, and reviewed separate branch saves work.
@@ -74,6 +74,17 @@ Reviewed base: 9e444a99b7478fa22600d10972f13c6c70091108. The user authorized onl
 
 Fix file groups: discovery normalization/repository/save service; new website safety helpers; discovery and new review regression tests; enhanced live Phase 1 verifier; README and PROJECT_STATE.md. No frontend redesign, new dependency, migration, or V2 feature.
 
+## Protocol-relative sanitization fix — 2026-10-01
+
+Reviewed base: 4945e3b8dd222b9870eeb9cf6116c6dc12c76689. Review found that //example.com/?api_key=fixture was sanitized in canonical contacts but retained credential values in raw provenance.
+
+- Metadata now recognizes protocol-relative URLs, resolves them to HTTPS, and applies the existing absolute-URL sanitizer. Credential/unknown query parameters, userinfo, and fragments are removed. Safe path, bounded page/language selectors, source identifiers, filenames, row numbers, and unrelated source fields are preserved. Malformed protocol-relative URLs become null. Other URL policies and app behavior are unchanged.
+- Two regression tests cover canonical/social contacts, nested provenance, encoded credential keys, fragments, userinfo, malformed URLs, equivalent absolute-URL filtering, and CSV preview/save/reload including the persistence row mapping.
+- npm run check: PASS — all 24 tests, zero-warning lint, typecheck, and production build.
+- npm run verify:phase1: PASS — the built authenticated API preview, remote Supabase website/social/provenance persistence, and API reload contain no synthetic protocol-relative credential values. Safe fields/source IDs remain intact. Existing retry, source linking, duplicate-review, and owner-isolation checks also pass. Only generated verifier rows are deleted. No live-provider request is needed for this CSV-only fix.
+- Secret scan: PASS — local configuration values absent from publishable files/Git file history; private/test credentials absent from web output; env/build/test artifacts remain ignored.
+- Changed files: apps/api/src/discovery/normalize.ts, tests/phase1-fixes.test.ts, scripts/verify-phase1.mjs, and PROJECT_STATE.md. No new dependency, schema/RLS change, UI change, or audit implementation.
+
 ## Changed file groups
 
 - apps/api/src/auth.ts and app/env/index/Supabase setup: verified authentication, safe routing/configuration/transport.
@@ -88,17 +99,19 @@ Fix file groups: discovery normalization/repository/save service; new website sa
 
 ## Limitations and Phase 2 handoff
 
-The three reported review defects are fixed and verified; review approval remains pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. The required live-source exit criterion is satisfied by OSM. Verify live SerpAPI before enabling/relying on it; its pending verification alone does not block the documented one-live-source criterion.
+The reported review defects, including the protocol-relative provenance sanitization gap, are fixed and verified; review approval remains pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. The required live-source exit criterion is satisfied by OSM. Verify live SerpAPI before enabling/relying on it; its pending verification alone does not block the documented one-live-source criterion.
 
 This personal architecture uses one API process. Persist .local/provider-usage.json across restarts; do not reset it to bypass caps. Previews/cache/locks are process-local and do not support replicas. A preview expires after 30 minutes or API restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate reads 2,000 owner records, saved read view latest 100, history 100 provenance records/lead. Failures are explicit; uncertain records never silently merge. OSM coverage/bounding boxes require relevance review.
 
-Phase 2 requires Phase 1 review approval. Consider preserved provenance before concluding NO_WEBSITE; expose conflicts for explicit review. Before any website HTTP fetching, implement the pinned-address/redirect-safe transport described above and test DNS rebinding and private redirect destinations. The safety helpers alone do not provide a safe fetcher. Add deterministic audits/classification/scoring only after approval; no fabricated results. Lead management and outreach remain Phases 3 and 4.
+Phase 2 requires Phase 1 review approval. Use preserved provenance before concluding NO_WEBSITE; expose conflicts for explicit review. Before any website HTTP fetching, pin validated IPs and preserve Host/TLS verification, disable automatic redirects, revalidate and repin every redirect hop, and bound redirect counts, timeouts, and response sizes. Test DNS rebinding and private redirects. The safety helpers alone do not provide a safe fetcher. Keep audits/scoring deterministic, measured, and explainable; no fabricated results. Add audits/classification/scoring only after approval. Lead management and outreach remain Phases 3 and 4.
 
 ## Publication and mandatory workflow
 
 Phase 1 commit message: feat: implement Phase 1 lead discovery and ingestion. Target: origin/main. Git history and the final handoff record the confirmed commit hash/push status.
 
 Separate review-fix commit message: fix: harden Phase 1 URLs, save retries, and provenance. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 2.
+
+Separate protocol-relative fix commit message: fix: sanitize protocol-relative URLs in lead provenance. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 2.
 
 At every future completed phase: run tests/lint/typecheck/build, review against SPEC.md, update state and limitations, commit separately, push and confirm SHA/status, then stop for review. Do not start the next phase without approval.
 

@@ -73,6 +73,24 @@ try {
   check(!persisted.error && persisted.data.owner_id === a.userId && persisted.data.score === null && persisted.data.classification === null
     && persisted.data.domain === domain && persisted.data.provenance[0].metadata.fields.extra === 'original', 'Remote persistence retains normalized fields and provenance without mass assignment');
   check(persisted.data.website === 'https://' + domain + '/?lang=en' && !JSON.stringify(persisted.data).includes('disposable-credential-marker'), 'Canonical and provenance URLs exclude credential query values remotely');
+
+  const relativeDomain = 'relative-' + marker + '.example';
+  const relativeWebsite = '//' + relativeDomain + '/contact?api_key=relative-credential-marker&lang=en#access_token=relative-credential-marker';
+  const relativeSocial = '//facebook.com/verification-' + marker + '?token=relative-credential-marker&page=2';
+  const relativeCsv = 'name,website,facebook,extra\nDisposable relative ' + marker + ',' + relativeWebsite + ',' + relativeSocial + ',preserved';
+  const relativePreview = await request('/api/discovery/import', a, { csv: relativeCsv, filename: 'relative-verification.csv' });
+  check(relativePreview.status === 200 && relativePreview.data.rows.length === 1 && !JSON.stringify(relativePreview.data).includes('relative-credential-marker'), 'Protocol-relative CSV preview contains no credential query or fragment values');
+  const relativeLead = relativePreview.data.rows[0].lead;
+  created.push({ client: a.client, id: relativeLead.id });
+  const relativeSaved = await request('/api/discovery/save', a, { previewId: relativePreview.data.id, selections: [{ id: relativeLead.id, action: 'save' }] });
+  const relativeRead = await a.client.from('leads').select('*').eq('id', relativeLead.id).single();
+  check(relativeSaved.data.results[0].status === 'saved' && !relativeRead.error && !JSON.stringify(relativeRead.data).includes('relative-credential-marker')
+    && relativeRead.data.website === 'https://' + relativeDomain + '/contact?lang=en' && relativeRead.data.socials.facebook === 'https:' + relativeSocial.split('?')[0] + '?page=2'
+    && relativeRead.data.provenance[0].metadata.fields.extra === 'preserved' && relativeRead.data.provenance[0].metadata.filename === 'relative-verification.csv'
+    && relativeRead.data.source_id === relativeLead.sourceId, 'Remote protocol-relative website/social/provenance persistence preserves safe fields without credentials');
+  const relativeReload = await request('/api/leads', a);
+  const relativeReloaded = relativeReload.data.leads.find(lead => lead.id === relativeLead.id);
+  check(relativeReload.status === 200 && Boolean(relativeReloaded) && !JSON.stringify(relativeReloaded).includes('relative-credential-marker'), 'Reloaded API lead keeps protocol-relative provenance sanitized');
   check((await request('/api/leads', a)).data.leads.some(lead => lead.id === row.lead.id)
     && !(await request('/api/leads', b)).data.leads.some(lead => lead.id === row.lead.id), 'Reloaded API leads remain owner scoped');
   const foreignRead = await b.client.from('leads').select('id').eq('id', row.lead.id);

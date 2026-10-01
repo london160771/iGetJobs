@@ -37,9 +37,10 @@ export function sanitizeMetadata(record: Record<string, unknown>): Record<string
     if (depth > 12) return null;
     if (Array.isArray(value)) return value.map(item => clean(item, depth + 1));
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !privateField.test(key)).map(([key, item]) => [key, clean(item, depth + 1)]));
-    if (typeof value === 'string' && /^(?:https?:\/\/|[^\s/?#]+\.[^\s/?#]+[/?#]|[^\s/?#]+:[^\s/?#]*@[^\s/?#]+\.[^\s/?#]+$)/i.test(value.trim())) {
+    if (typeof value === 'string' && /^(?:https?:\/\/|\/\/|[^\s/?#]+\.[^\s/?#]+[/?#]|[^\s/?#]+:[^\s/?#]*@[^\s/?#]+\.[^\s/?#]+$)/i.test(value.trim())) {
       try {
-        const url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : 'https://' + value.trim());
+        const input = value.trim();
+        const url = new URL(input.startsWith('//') ? 'https:' + input : /^https?:\/\//i.test(input) ? input : 'https://' + input);
         return sanitizeHttpUrl(url);
       } catch { return null; }
     }
