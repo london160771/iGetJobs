@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Phase 1 implemented:** authenticated discovery, CSV previews, conservative duplicate review, and Supabase lead persistence. Phase 2 website auditing and scoring have not started. Leads remain unclassified and unscored until measurable checks are performed.
+**Phases 1 and 2 implemented:** authenticated discovery, conservative duplicate review, Supabase persistence, safe website auditing, deterministic classification, and explainable scoring. New leads remain unclassified and unscored until an audit completes. Stop for review before Phase 3 lead management.
 
 ## Local setup
 
@@ -44,7 +44,7 @@ Use a confirmed email/password account at `/login`. All workspace routes require
 2. Find leads or upload a CSV to create a preview. Nothing is saved automatically.
 3. Review location, contact information, source notes, and duplicate evidence. A missing source website is not an audit or a classification.
 4. Select up to 50 results and save. Failures are reported per row; retrying the same preview does not repeat completed saves. Owner-scoped lookup by the server-created preview lead ID also reconciles an insert that committed before its response was lost; retry returns the existing lead without overwriting it.
-5. Open Saved leads to reload the latest 100 records from Supabase. This read view verifies collection; lead management, filters, detail views, auditing, and outreach remain later phases.
+5. Open Saved leads to reload the latest 100 records from Supabase. Inspect a lead's website evidence, run its audit, and review the classification, numeric score, priority, reasons, and checks. Management, filters, and outreach remain later phases.
 
 Each source has an isolated adapter. Normalization trims text, normalizes domains/HTTP(S) URLs, validates E.164 phones using the country, normalizes email/country, and bounds ratings/review counts. Invalid contacts become null with visible warnings, while original source fields remain in provenance. Source/sourceId, raw OSM tags, SerpAPI record fields, and CSV columns/row numbers are retained, subject to credential sanitization. Website/social and metadata URLs share sanitization: userinfo is rejected in canonical contacts, metadata userinfo is stripped, fragments and unknown query parameters are removed. Only bounded `page` numbers and validated `lang`/`locale` selectors survive because they select pagination or language without accepting arbitrary secret values. Credential-shaped metadata fields are removed. Oversized metadata records are skipped with a source note.
 
@@ -72,13 +72,40 @@ One live provider request runs at a time; identical in-flight requests share the
 
 Run one API process for this personal workspace. The quota file, previews, and locks do not coordinate multiple processes/replicas. Distributed operation is outside the current architecture. Duplicate checks inspect at most 2,000 owner records and fail clearly above that limit. Source history is limited to 100 provenance records per lead; simultaneous metadata updates use an optimistic timestamp check. Provenance equality recursively sorts object keys, retains array order, and preserves genuinely different values. Repeated links remain idempotent after PostgreSQL JSONB reorders keys.
 
-### Phase 2 website-fetch safety hook
+## Website audit and scoring (Phase 2)
 
-`apps/api/src/website-safety.ts` prepares safety helpers only; no audit, classification, scoring, or website HTTP fetching is implemented.
+Open **Leads → Inspect evidence / audit**. Canonical website data and all supported linked CSV/OSM/SerpAPI website fields are considered with source IDs and field paths. Map/social URLs are not treated as business websites. Multiple candidates or invalid evidence require an explicit selection; invalid-only evidence must be corrected through import/linking. New normalization retains a non-sensitive `websiteEvidenceInvalid` marker when a rejected URL had to be discarded. No available website evidence produces `NO_WEBSITE` without a network request. A failed or blocked request is never treated as proof of no website. A choice is recorded without overwriting canonical fields or source history.
 
-- `collectWebsiteEvidence` exposes sanitized canonical website data and supported CSV/OSM/SerpAPI website fields from all linked provenance, with their source IDs and field paths. It excludes map/social URLs and does not pick a winner or modify the lead. Future audits must resolve conflicting evidence explicitly; a null canonical website is not proof that no website exists.
-- `validateWebsiteDestination` permits HTTP(S) on standard web ports, rejects credentials/internal hostnames, resolves all addresses with a bounded wait, and fails closed if any answer is invalid or non-public. It excludes loopback, private/shared/link-local/multicast/reserved IPv4, metadata/platform endpoints, and non-global or special-purpose IPv6. IP shorthand and mapped forms cannot bypass checks. Tests use injected DNS results; they never fetch the blocked targets.
-- **Mandatory before any Phase 2 website request:** pin a returned validated address in the transport while preserving the original Host/TLS hostname. Do not validate then call ordinary `fetch(url)`, which re-resolves DNS and permits rebinding. Disable automatic redirects; resolve and validate every redirect hop, pin its connection, and bound redirects/time/response size. Retest redirect-to-private and DNS-rebinding cases when implementing that transport. These helpers do not constitute a safe fetcher on their own.
+- `validateWebsiteDestination` allows HTTP(S) on web ports, rejects credentials/internal hostnames, and fails closed if any DNS answer is invalid or non-public. Loopback, private/shared/link-local/multicast/reserved IPv4, metadata/platform endpoints, non-global/special-purpose IPv6, shorthand and mapped forms are blocked. DNS waits are bounded to five seconds and the overall deadline.
+- The Node HTTP(S) transport pins the first approved address through a lookup callback, disables address family selection and connection pooling, preserves Host and TLS hostname/certificate verification, and sends no cookies, authorization or proxy credentials. There is no second DNS lookup for the connection. **Never replace this with ordinary `fetch(url)` after validation.**
+- Automatic redirects are disabled. Each of at most three hops is revalidated and repinned, including same-host redirects. Userinfo and unsafe protocols are rejected before URL sanitization. Query credentials/fragments are stripped using Phase 1 rules. Requests have an eight-second absolute deadline, twenty seconds for the chain, 16KB header and 1MB HTML limits. Compressed responses are declined; HTML parsing executes no scripts, assets or extra link requests.
+- Audits require verified Auth, use the user's RLS-scoped client, accept only a candidate choice, and update assessment fields only. Owner/ID/evidence timestamp guards reject concurrent lead changes. Two audits globally, one per owner, and a five-second owner cooldown bound work in the documented single API process. No automatic retries/bulk audit/caching of potentially stale measurements. New, genuinely different linked provenance clears an old assessment; identical links retain it.
+
+Completed audits always have one classification and a 0–100 score with explicit reasons. Missing evidence is `NO_WEBSITE`; network/DNS/timeouts or unsuccessful HTTP responses produce `POOR_WEBSITE` with a clearly labeled **unreachable in this audit** state and unknown page-quality checks. Reachable HTML becomes `POOR_WEBSITE` when weighted measured quality failures total at least 18, otherwise `ACCEPTABLE_WEBSITE`. Unsafe destinations, redirect/size/encoding limits, unsupported content, and HTTP 401/403/429 produce an incomplete audit error and leave prior results unchanged. They cannot support a quality classification.
+
+Checks measure HTTPS, `width=device-width` meta, inline/style minimum widths above 480px, bounded response duration, HTML bytes, contact patterns, CTA labels, title/h1/text structure, and missing local fragment targets. Hidden/inline-hidden content, scripts and styles are excluded from text checks. External CSS visibility, JavaScript-rendered contacts, actual click behavior, full browser performance, external links and rendered mobile usability are **not verified**. Unknown checks contribute no points. Contact/CTA absence means absent from the fetched HTML, not absent from every rendered page. No subjective design-age or fabricated local-relevance score is assigned.
+
+Default configurable points:
+
+| Factor | Points |
+| --- | ---: |
+| No website after evidence resolution / unreachable request | 60 / 50 |
+| Missing HTTPS / mobile viewport / fixed minimum width indicator | 10 / 8 / 6 |
+| Response over 3,000ms / HTML over 500,000 bytes | 5 / 4 |
+| Missing contact / CTA / basic structure / broken local fragment | 6 / 6 / 4 / 3 |
+| Recorded phone/email / rating ≥4 with ≥5 reviews / source identifier | 10 / 5 / 5 |
+
+The last three are recorded source indicators, not independently verified facts. Score is the sum of reasons capped at 100; a cap adjustment is visible. A zero score has a zero-point explanation. High priority starts at 70, Medium at 40, Low below 40. Classification uses quality penalties only, not source/contact bonuses. Every audit stores its policy, choice, evidence, checks, metrics, timestamp, classification reasons and score reasons in existing Supabase columns; no new migration is needed.
+
+To tune weights, set a **complete** `AUDIT_SCORING_JSON` policy in the ignored API env, then restart. Defaults are in `apps/api/src/audit/policy.ts`; the following is a non-secret example of the full shape (use compact JSON as an env value):
+
+```json
+{"weights":{"no_website":60,"unreachable":50,"https":10,"viewport":8,"mobile_width":6,"performance":5,"page_size":4,"contact":6,"cta":6,"structure":4,"links":3,"contactable":10,"business_signal":5,"source_identity":5},"poorThreshold":18,"highPriority":70,"mediumPriority":40,"slowMs":3000,"largeBytes":500000}
+```
+
+Weights must be integers 0–100 with exactly the documented keys; thresholds are positive integers with Medium below High. Size/time thresholds cannot exceed fetch limits. Invalid config fails without echoing its value. Existing audit policies stay recorded; rerun an audit to apply new settings. Identical measured input and configuration produce identical results; real pages, DNS/reachability and timings can change between runs. Leads and Lead Detail display the measurement limits alongside evidence.
+
+Authenticated endpoints: `GET /api/leads/:id` returns the lead/evidence/policy; `POST /api/leads/:id/audit` accepts `{}` for unambiguous evidence or `{"website":"https://candidate.com/"}` for an explicit preserved candidate. Arbitrary URLs, scores, classifications, ownership and audit payloads are rejected.
 
 Conservative address policy references: [IANA IPv4 special-purpose registry](https://www.iana.org/assignments/iana-ipv4-special-registry/), [IANA IPv6 special-purpose registry](https://www.iana.org/assignments/iana-ipv6-special-registry/). Some special-purpose public exceptions are deliberately excluded.
 
@@ -92,6 +119,7 @@ Backend configuration:
 | `SERPAPI_MONTHLY_LIMIT` | Local monthly attempt cap (default 50); never overrides provider allowance |
 | `OSM_NOMINATIM_URL`, `OSM_OVERPASS_URL` | Optional HTTPS endpoint overrides, without credentials/query strings/fragments; switch providers through env/restart |
 | `HOST`, `PORT` | Default `127.0.0.1`, `3001` |
+| `AUDIT_SCORING_JSON` | Optional full numeric audit/scoring policy; defaults and validation above |
 
 If changing PORT, set the web's `API_PROXY_TARGET` accordingly. Browser API requests stay same-origin through the Vite proxy; no permissive CORS is enabled.
 
@@ -112,13 +140,19 @@ npm run verify:supabase
 npm run verify:phase1
 # Include one bounded live OSM discovery/save/cache check:
 npm run verify:phase1 -- --live-source
+# Authenticated Phase 2 fixture audits, remote persistence/RLS and optimistic writes:
+npm run verify:phase2
+# Also one real public HTTPS audit using the production pinned transport:
+npm run verify:phase2 -- --live-website
 ```
 
 Live verifiers use two **confirmed, disposable** Auth accounts configured in ignored root `.env` through `SUPABASE_TEST_EMAIL_A`, `SUPABASE_TEST_PASSWORD_A`, `SUPABASE_TEST_EMAIL_B`, and `SUPABASE_TEST_PASSWORD_B`. Do not print/paste/commit their values. Accounts must have no existing `user_settings` row for the prerequisite verifier. Missing setup fails rather than being skipped. Verifiers remove only their generated test rows and end their non-persisted sessions.
 
 `verify:supabase` checks live password sign-in, verified identities, persistence, bidirectional cross-user read/update/delete denial, forged inserts, owner-transfer denial, and anonymous access on both tables. `--connectivity-only` probes the schema/gateway but does not prove RLS. `verify:phase1` runs the built API on an ephemeral loopback port and checks token guards, owner-bound previews, normalized CSV storage, retry behavior, explicit source linking, uncertain duplicates, and remote isolation. Its live-source option consumes one guarded OSM attempt; wait at least 15 seconds after any other uncached OSM request and do not make concurrent quota-sensitive requests from separate API processes.
 
-Unit tests execute the unchanged migration in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. They complement the remote verification; the app uses only Supabase for persistence. Other tests cover normalization, source transports, free-plan/quota guards, CSV bounds, safe API errors, and preview/save ownership.
+`verify:phase2` uses explicitly injected HTML fixtures for predictable classification, then verifies real Auth/API/JSONB persistence, cross-user denial, evidence choices, cooldown and stale-write rejection. Its live-website option additionally fetches `https://example.com/` through the actual validated, pinned HTTPS transport. Only generated records are cleaned up. Fixtures do not claim to be live business audit measurements.
+
+Unit tests execute the unchanged migration in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. They complement remote checks; the app uses only Supabase for persistence. Tests also cover measured audit/classification/scoring math, repeat determinism, missing/conflicting evidence, response/deadline limits, private redirects, DNS rebinding, stale/source-changed assessments, Phase 1 normalization/transports/quotas/CSV/dedupe/retries, and safe Auth/API errors.
 
 Build order: shared contracts → API → web. Outputs: `packages/shared/dist`, `apps/api/dist`, `apps/web/dist`. After building, production smoke tests can use two terminals:
 
@@ -132,14 +166,14 @@ Web preview is http://127.0.0.1:4173 with the local API proxy. A real deployment
 ## Structure and phase boundary
 
 ```text
-apps/web/            React/TypeScript shell, login, Search previews, saved collection read view
-apps/api/            Express/TypeScript API, verified auth, isolated adapters, quota guard, persistence
-packages/shared/     Normalized Lead and API/discovery contracts
+apps/web/            React/TypeScript shell, login, Search, saved collection and audit detail
+apps/api/            Express API, auth, discovery, quota guard, safe audit/scoring, persistence
+packages/shared/     Normalized Lead and API/discovery/audit contracts
 supabase/migrations/ V1 schema and owner policies
-scripts/             Safe live Supabase and Phase 1 verification
-tests/               Foundation, discovery, PostgreSQL RLS tests
+scripts/             Safe live Supabase, Phase 1 and Phase 2 verification
+tests/               Foundation, discovery, audit/security, PostgreSQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. The workspace uses a viewport-fixed shell, fixed navigation/top bar, and a single scrolling content outlet. Short landscape navigation remains fully visible; mobile navigation wraps. Lead detail/outreach/scoring/management are intentionally placeholders for their approved phases.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. The workspace uses a viewport-fixed shell, fixed navigation/top bar, and one scrolling content outlet. Short landscape navigation remains accessible; mobile navigation wraps. Phase 2 detail supports audits only; management, pipeline editing, filters, dashboard metrics and outreach remain their later phases.
 
 Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish each approved phase with checks, state update, separate commit/push, and review before proceeding. React, Node.js, Supabase, free tiers. No Next.js, MongoDB, AI, Hunter integration yet, automatic outreach, paid dependency, or V2 features.

@@ -19,6 +19,7 @@
     "test": "npm run build -w @igetjobs/shared && node --import tsx --test tests/*.test.ts",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:phase1": "node scripts/verify-phase1.mjs",
+    "verify:phase2": "node scripts/verify-phase2.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 0 is approved and complete. Phase 1 discovery/ingestion, its Supabase prerequisites, and the requested review fixes, including protocol-relative provenance URL sanitization, are implemented and verified. Stop for review of this separate sanitization fix commit. **Phase 2 has not started and requires approval.**
+Phases 0 and 1 are approved and complete, including all reviewed sanitization, retry and provenance fixes. The user authorized Phase 2 only. Website evidence resolution, safe fetching, deterministic audits, classification, configurable explainable scoring, Supabase assessment persistence, and the Leads/Lead Detail UI are implemented and verified. **Stop for Phase 2 review. Phase 3 has not started.**
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
@@ -14,7 +14,7 @@ SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. S
 - Isolated SerpAPI, OpenStreetMap/Overpass, and manual CSV sources.
 - Configurable US/GB/CA/AU markets and all nine starter niches.
 - No Next.js, MongoDB, AI, paid requirement, Hunter integration yet, automatic outreach/calling, CRM, or V2 features.
-- Audits, classification, scoring, management, and outreach remain their later phases. New leads have null audit/classification/score/draft and status New.
+- Phase 2 adds audits/classification/scoring only. New leads still have null audit/classification/score/draft and status New. Management, filters, pipeline editing, dashboard counts and outreach remain Phases 3 and 4.
 
 ## Approved Phase 0 history
 
@@ -85,7 +85,34 @@ Reviewed base: 4945e3b8dd222b9870eeb9cf6116c6dc12c76689. Review found that //exa
 - Secret scan: PASS — local configuration values absent from publishable files/Git file history; private/test credentials absent from web output; env/build/test artifacts remain ignored.
 - Changed files: apps/api/src/discovery/normalize.ts, tests/phase1-fixes.test.ts, scripts/verify-phase1.mjs, and PROJECT_STATE.md. No new dependency, schema/RLS change, UI change, or audit implementation.
 
-## Changed file groups
+## Completed Phase 2 — 2026-10-01
+
+Approved base: 82d60f4cfebcd25a4142b53122f12a2f6b0904f4. No new migration or RLS policy is required; the existing V1 assessment columns are used.
+
+- Website resolution checks canonical and supported linked CSV/OSM/SerpAPI fields, retaining sanitized URLs/source IDs/paths. Conflicting or invalid evidence requires an explicit preserved candidate choice. Invalid-only evidence cannot become NO_WEBSITE; new normalization records a non-sensitive invalid-evidence marker even when sanitization discarded the input. Selection never overwrites contact/source data.
+- The Node HTTP(S) fetcher validates every destination and all DNS answers, pins the approved address through a custom lookup, disables address family selection and pooling, preserves Host/TLS identity and certificate checks, and forwards no credentials/cookies. No ordinary fetch(url) is used for website requests. Local/private/link-local/metadata/internal and special-purpose destinations are blocked before connection.
+- Redirects are manual, capped at three, and revalidated/repinned at every hop including the same hostname. Eight-second absolute request deadlines, twenty-second overall abort, five-second bounded DNS waits within that deadline, 16KB headers and 1MB HTML cap bound work. Compression is declined; no assets/scripts/extra link requests execute. Rebinding and private/userinfo/protocol redirect tests assert no unsafe transport connection.
+- Static audits measure reachability, HTTPS, viewport meta, fixed minimum-width indicators, bounded response timing/HTML bytes, contact/CTA text patterns, title/h1/text structure and local fragment targets. Unknown/external/rendered behavior is explicitly unverified and earns no penalty. Hidden/inline-hidden content/scripts/styles are excluded from visible-text checks. No subjective design age, AI or fabricated relevance.
+- Completed assessments have exactly NO_WEBSITE, POOR_WEBSITE or ACCEPTABLE_WEBSITE. Missing evidence produces NO_WEBSITE; failed network/DNS/timeouts/HTTP responses produce a labeled unreachable POOR_WEBSITE state with page quality unknown. Reachable HTML uses the inclusive weighted quality threshold (default 18). Unsafe/oversized/unsupported/restricted/redirect-limited results remain incomplete and do not replace a prior assessment.
+- Scores sum explicit reasons, cap at 100 with a visible cap adjustment, and explain zero-point results. Default missing/unreachable weights 60/50 prioritize website need; measured quality penalties and recorded contact/rating/source indicators add points. High/Medium thresholds default to 70/40. Full numeric policy is configured through server AUDIT_SCORING_JSON; exact keys/weights/thresholds are validated without echoing values, recorded per audit and shown in UI.
+- Authenticated detail/audit endpoints reject field injection, arbitrary URLs and foreign IDs. Per-user JWT/public Supabase clients enforce RLS. Updates change assessment fields only, with owner/ID/updated_at optimistic guards. One audit per owner, two globally and a five-second cooldown bound single-process requests. A new source link clears stale derived assessments; identical links retain a refreshed audit through JSONB round trips.
+- Leads and Lead Detail show classification, numeric score, priority, explicit reasons and audit evidence; detail records the selected/final-response or attempted website and policy. Conflicts require a choice. Loading, reload, incomplete/blocked and unreachable states are clear. Navigation/unmount aborts stale client requests. Existing desktop/mobile shell and discovery flow are preserved.
+- Added Cheerio (MIT, free) for bounded static HTML parsing. It does not perform network requests or execute scripts. No Hunter, AI, management, outreach, automatic sending or Phase 3 implementation.
+
+### Phase 2 verification
+
+- npm run check: PASS — 39 tests, zero-warning lint, TypeScript including tests, and shared/API/web production builds.
+- Tests cover missing/unreachable/acceptable/poor outcomes, repeat determinism, scoring math/caps/zero reasons/config/thresholds, provenance conflicts/discarded invalid URLs, hidden content, restricted/unsupported pages, private/internal/metadata destinations, private/userinfo/protocol redirects, redirect limits, DNS rebinding/pinned Host/TLS options, response-size/compression/deadline/DNS limits, owner boundaries/cooldown, optimistic writes, and invalidation of stale assessments after new linking. All 24 Phase 1 regression tests remain passing.
+- npm run verify:supabase: PASS — live Auth/persistence and bidirectional cross-user/anonymous/ownership denial for leads and user_settings; only generated test rows cleaned up.
+- npm run verify:phase2 -- --live-website: PASS — production API Auth guards, real remote assessment JSONB/reasons/source persistence, two-account isolation, explicit conflict selection, incomplete unsafe destinations, cooldown and stale-write rejection. Predictable HTML fixtures are explicitly injected for classification tests. A real public HTTPS page is separately fetched through production DNS validation/pinning/Host/TLS verification and measured successfully.
+- Final live checks also cover discarded invalid URL markers and assessment invalidation/idempotent linking through remote JSONB. One intermediate rerun had a transient connection failure; its generated rows were recovered by exact ID/name/owner, the complete rerun passed, and follow-up reads confirmed zero Phase 2 verifier rows for both accounts. An ignored UUID-only recovery journal now supports cleanup after interrupted checks; it contains no credentials/tokens.
+- npm run verify:phase1 -- --live-source: PASS — CSV preview/save/reload/sanitization, lost-response retry, JSONB provenance idempotency, uncertain duplicate review, owner isolation, live OSM discovery/cache/save. OSM returned 24 normalized results. No SerpAPI credential was supplied; its prior mocked free-tier safeguards remain passing and it remains unavailable until configured.
+- Browser: authenticated audit save/reload in Leads, missing evidence, explicit conflict choice and a live example.com audit, unsafe-target refusal and DNS-unreachable state pass. Responsive audit views at 1280×720, 390×844, 320×740 and 844×320 show no document/horizontal overflow, one workspace-content scroller, fixed navigation/header and accessible short-landscape navigation/footer. Test screenshots remain ignored; disposable browser rows are cleaned up and the session signed out.
+- Secret scan: PASS — actual local configuration absent from publishable files/Git file history; test/private credentials absent from production web output. Env, build, usage and verification artifacts remain ignored. No secret values are printed.
+
+Phase 2 file groups: new API audit engine/policy/pinned fetcher/service/routes; website evidence/safety and discovery assessment invalidation/invalid-evidence marker; shared audit contracts; Leads/detail/assessment components/styles/routing; audit regression tests/live verifier; npm manifests/lockfile, API env example, README and PROJECT_STATE.md.
+
+## Earlier Phase 0/1 changed file groups
 
 - apps/api/src/auth.ts and app/env/index/Supabase setup: verified authentication, safe routing/configuration/transport.
 - apps/api/src/discovery/: adapters/interfaces, normalization, dedupe, quota guard/storage, preview/save service, authenticated repository/routes.
@@ -97,13 +124,15 @@ Reviewed base: 4945e3b8dd222b9870eeb9cf6116c6dc12c76689. Review found that //exa
 - scripts/verify-supabase.mjs and scripts/verify-phase1.mjs: safe live checks and test-row cleanup.
 - Root/workspace env examples, .gitignore, README, npm manifests/lockfile, lint configuration, and this state.
 
-## Limitations and Phase 2 handoff
+## Limitations and Phase 3 handoff
 
-The reported review defects, including the protocol-relative provenance sanitization gap, are fixed and verified; review approval remains pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. The required live-source exit criterion is satisfied by OSM. Verify live SerpAPI before enabling/relying on it; its pending verification alone does not block the documented one-live-source criterion.
+Phase 1 and its review fixes are approved; Phase 2 review is pending. No remaining Supabase prerequisite blocker. Live SerpAPI remains unverified because no provider key was supplied; its adapter/free-plan safeguards pass mocked transport tests and it remains unavailable until configured. OSM satisfies the one-live-source criterion. Verify live SerpAPI before enabling/relying on it.
 
 This personal architecture uses one API process. Persist .local/provider-usage.json across restarts; do not reset it to bypass caps. Previews/cache/locks are process-local and do not support replicas. A preview expires after 30 minutes or API restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate reads 2,000 owner records, saved read view latest 100, history 100 provenance records/lead. Failures are explicit; uncertain records never silently merge. OSM coverage/bounding boxes require relevance review.
 
-Phase 2 requires Phase 1 review approval. Use preserved provenance before concluding NO_WEBSITE; expose conflicts for explicit review. Before any website HTTP fetching, pin validated IPs and preserve Host/TLS verification, disable automatic redirects, revalidate and repin every redirect hop, and bound redirect counts, timeouts, and response sizes. Test DNS rebinding and private redirects. The safety helpers alone do not provide a safe fetcher. Keep audits/scoring deterministic, measured, and explainable; no fabricated results. Add audits/classification/scoring only after approval. Lead management and outreach remain Phases 3 and 4.
+Phase 2 uses static HTML, not a rendered browser audit. JavaScript-only pages, external CSS visibility, actual CTA behavior, external broken links and complete mobile/performance behavior remain unverified. Compression, unsupported content and access restrictions may require manual review; no score is invented for incomplete audits. Address rules deliberately reject some public special-purpose exceptions. Only the first approved IP is tried, without automatic retries. Results reflect the measured snapshot and may change with real page/DNS/timing changes. Previously discarded invalid source strings cannot be reconstructed; import corrected evidence when historical source data is incomplete.
+
+Preserve safety in later phases: use provenance before NO_WEBSITE; pin validated IPs, preserve Host/TLS checks, disable automatic redirects, revalidate/repin every hop, keep bounds and rebinding/private-redirect tests. Do not bypass the pinned transport or execute page assets. Keep classifications/scoring deterministic and explicit. Phase 3 requires review approval; management/outreach remain their approved later phases.
 
 ## Publication and mandatory workflow
 
@@ -112,6 +141,8 @@ Phase 1 commit message: feat: implement Phase 1 lead discovery and ingestion. Ta
 Separate review-fix commit message: fix: harden Phase 1 URLs, save retries, and provenance. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 2.
 
 Separate protocol-relative fix commit message: fix: sanitize protocol-relative URLs in lead provenance. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 2.
+
+Phase 2 commit message: feat: implement safe website audits and explainable scoring. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 3.
 
 At every future completed phase: run tests/lint/typecheck/build, review against SPEC.md, update state and limitations, commit separately, push and confirm SHA/status, then stop for review. Do not start the next phase without approval.
 

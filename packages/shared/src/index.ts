@@ -1,4 +1,4 @@
-/** Shared contracts only. Discovery, audit, scoring and persistence belong to later phases. */
+/** Shared V1 contracts. */
 export type LeadSource = 'SERPAPI' | 'OSM' | 'CSV';
 export type LeadClassification = 'NO_WEBSITE' | 'POOR_WEBSITE' | 'ACCEPTABLE_WEBSITE';
 export type LeadStatus = 'New' | 'Qualified' | 'Contacted' | 'Replied' | 'Call Booked' | 'Closed' | 'Lost';
@@ -24,7 +24,29 @@ export interface WebsiteAudit {
   auditedAt: IsoDateTime;
   website: string | null;
   checks: AuditCheck[];
+  version?: string;
+  state?: 'missing' | 'reachable' | 'unreachable';
+  requestedWebsite?: string | null;
+  evidence?: WebsiteEvidence[];
+  classificationReasons?: string[];
+  scoring?: ScoringConfig;
+  metrics?: { status: number | null; durationMs: number | null; bytes: number | null; redirects: number | null };
 }
+
+export interface WebsiteEvidence { url: string | null; source: LeadSource; sourceId: string | null; path: string }
+export interface WebsiteResolution { evidence: WebsiteEvidence[]; candidates: string[]; invalidCount: number; requiresChoice: boolean }
+export interface ScoringConfig {
+  weights: Record<string, number>;
+  poorThreshold: number;
+  highPriority: number;
+  mediumPriority: number;
+  slowMs: number;
+  largeBytes: number;
+}
+export function leadPriority(score: number | null, config?: ScoringConfig): LeadPriority | null {
+  return score === null ? null : score >= (config?.highPriority ?? 70) ? 'High' : score >= (config?.mediumPriority ?? 40) ? 'Medium' : 'Low';
+}
+export interface AuditDetail { lead: Lead; resolution: WebsiteResolution; scoring: ScoringConfig }
 
 export interface ScoreReason {
   key: string;

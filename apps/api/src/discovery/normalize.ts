@@ -70,7 +70,11 @@ export function normalizeLead(record: SourceRecord, source: LeadSource): { lead:
   const numeric = (value: unknown) => typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value.replace(/,/g, '')) : NaN;
   const rating = numeric(record.rating), reviews = numeric(record.reviewCount);
   const now = new Date().toISOString();
-  const provenance = { source, sourceId: record.sourceId, metadata: sanitizeMetadata(record.metadata) };
+  const metadata = sanitizeMetadata(record.metadata);
+  // Keep a non-sensitive invalid-evidence marker even when URL sanitization had
+  // to discard the source string. Null canonical data must not imply NO_WEBSITE.
+  if (text(record.website) && !website) metadata.websiteEvidenceInvalid = true;
+  const provenance = { source, sourceId: record.sourceId, metadata };
   return { warnings, lead: {
     id: randomUUID(), businessName, niche: text(record.niche), country, city: text(record.city), address: text(record.address),
     phone, website, domain: website ? new URL(website).hostname.toLowerCase().replace(/^www\./, '') : null,

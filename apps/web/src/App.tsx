@@ -7,6 +7,7 @@ import { Login } from './Login';
 import { PageHeader, EmptyState } from './components';
 const Search = lazy(async () => ({ default: (await import('./Search')).Search }));
 const Leads = lazy(async () => ({ default: (await import('./Leads')).Leads }));
+const LeadDetail = lazy(async () => ({ default: (await import('./LeadDetail')).LeadDetail }));
 
 const navigation = [
   { path: '/', label: 'Dashboard', number: '01' },
@@ -110,7 +111,7 @@ function Settings() {
         ? 'Public connection settings are present. Sign-in was verified for this session; database checks are documented in the setup guide.'
         : 'Add the connection settings using the local setup guide in README.md.'}</p>
     </section>
-    <p className="scope-note">Markets, niches, and discovery sources are configured through the local setup guide. Scoring preferences will follow with website auditing.</p>
+    <p className="scope-note">Markets, niches, discovery sources, and audit scoring weights are configured through the local setup guide. Each audit records the weights and thresholds it used.</p>
   </>;
 }
 
@@ -122,7 +123,7 @@ export function App() {
       <Route index element={<Dashboard />} />
       <Route path="search" element={<Search />} />
       <Route path="leads" element={<Leads />} />
-      <Route path="leads/:leadId" element={<PlaceholderPage title="Lead detail" description="Business information and opportunity details." emptyTitle="Lead details are not available yet" detail="Contact data, audits, scores, and notes will be connected in later phases." />} />
+      <Route path="leads/:leadId" element={<LeadDetail />} />
       <Route path="outreach" element={<PlaceholderPage title="Outreach" description="Prepare personal outreach for human review." emptyTitle="Thoughtful outreach starts with a lead" detail="Editable drafts and approval will be added in Phase 4. Outreach will never auto-send." />} />
       <Route path="settings" element={<Settings />} />
       <Route path="*" element={<><PageHeader title="Page not found" description="This address does not belong to a workspace section." /><Link className="button" to="/">Return to Dashboard</Link></>} />

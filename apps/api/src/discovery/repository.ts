@@ -52,7 +52,10 @@ export class SupabaseLeadRepository implements LeadRepository {
     const seen = new Set<string>();
     const provenance = all.filter(item => { const key = canonicalJson(item); if (seen.has(key)) return false; seen.add(key); return true; });
     if (provenance.length > 100) throw new RequestError(409, 'The saved lead has reached its source-history limit. Save separately after review.');
-    const updated = await this.client.from('leads').update({ provenance }).eq('owner_id', this.ownerId).eq('id', id).eq('updated_at', lead.updatedAt).select('*').maybeSingle();
+    // New evidence can invalidate NO_WEBSITE or source-confidence scoring. A repeated
+    // identical link retains the audit; genuinely changed history requires a new audit.
+    const changed = canonicalJson(provenance) !== canonicalJson(lead.provenance);
+    const updated = await this.client.from('leads').update({ provenance, ...(changed ? { audit: null, classification: null, score: null, score_reasons: [] } : {}) }).eq('owner_id', this.ownerId).eq('id', id).eq('updated_at', lead.updatedAt).select('*').maybeSingle();
     if (updated.error || !updated.data) throw new RequestError(409, 'The saved lead changed. Refresh the preview before adding source metadata.');
     return leadFromRow(updated.data);
   }
