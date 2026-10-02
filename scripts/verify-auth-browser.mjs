@@ -15,13 +15,13 @@ let browser, checkpoint = 'Browser setup';
 function check(condition,label) { checkpoint = label; if (!condition) throw new Error(); console.log('PASS: ' + label); }
 try {
   const signedB = await accountB.auth.signInWithPassword({ email:process.env.SUPABASE_TEST_EMAIL_B,password:process.env.SUPABASE_TEST_PASSWORD_B }); check(!signedB.error,'Second disposable account authenticates');
-  browser = await chromium.launch({ channel:'chrome',headless:true });
+  checkpoint = 'Chrome startup'; browser = await chromium.launch({ channel:'chrome',headless:true });
   const page = await browser.newPage({ viewport:{ width:1280,height:720 } }); page.setDefaultTimeout(90000);
   const email = process.env.SUPABASE_SMOKE_EMAIL || process.env.SUPABASE_TEST_EMAIL_A, password = process.env.SUPABASE_SMOKE_PASSWORD || process.env.SUPABASE_TEST_PASSWORD_A;
-  await page.goto(target.origin + '/login');
+  checkpoint = 'Login page load'; await page.goto(target.origin + '/login');
   check(await page.getByRole('button',{ name:'Create an account',exact:true }).count() === 0,'No public signup control');
   async function login() { await page.getByLabel('Email',{ exact:true }).fill(email); await page.getByLabel('Password',{ exact:true }).fill(password); await page.getByRole('button',{ name:'Sign in',exact:true }).click(); await page.waitForURL(url => url.pathname !== '/login'); }
-  await login();
+  checkpoint = 'Existing-account login'; await login();
   async function revalidate(refresh = false) {
     const verified = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/v1/user' && response.status() === 200);
     const refreshed = refresh ? page.waitForResponse(response => new URL(response.url()).pathname === '/auth/v1/token' && new URL(response.url()).searchParams.get('grant_type') === 'refresh_token' && response.status() === 200) : null;
@@ -65,6 +65,6 @@ try {
   await login(); await page.goto(target.origin + '/search'); await page.getByLabel('City',{ exact:true }).waitFor();
   check(await page.getByLabel('City',{ exact:true }).inputValue() === '','Logout/login starts with clean Search state');
   await page.getByRole('button',{ name:'Sign out',exact:true }).click(); await page.waitForURL(target.origin + '/login');
-} catch { console.error('FAIL: ' + checkpoint + '. No credentials emitted.'); process.exitCode = 1; }
+} catch (error) { const kind = error instanceof Error ? error.name : 'Unknown'; const network = error instanceof Error ? error.message.match(/net::ERR_[A-Z_]+/)?.[0] : null; console.error('FAIL: ' + checkpoint + ' (' + kind + (network ? ', ' + network : '') + '). No credentials emitted.'); process.exitCode = 1; }
 finally { await browser?.close(); await accountB.auth.signOut({ scope:'local' }).catch(() => {}); }
 
