@@ -7,6 +7,8 @@ if (process.env.SUPABASE_SMOKE_EMAIL && process.env.SUPABASE_SMOKE_PASSWORD) {
   process.env.SUPABASE_TEST_EMAIL_A=process.env.SUPABASE_SMOKE_EMAIL;
   process.env.SUPABASE_TEST_PASSWORD_A=process.env.SUPABASE_SMOKE_PASSWORD;
 }
+const provider = process.argv.includes('--geoapify') ? 'GEOAPIFY' : 'SERPAPI';
+const limit = Number(provider === 'GEOAPIFY' ? process.env.GEOAPIFY_DAILY_LIMIT || '100' : process.env.SERPAPI_MONTHLY_LIMIT || '50');
 let checkpoint = 'Supabase quota configuration';
 const clients = [];
 const check = (value,label) => { checkpoint = label; if (!value) throw new Error(); console.log('PASS: ' + label); };
@@ -15,11 +17,11 @@ try {
   const before = await first.load();
   // This is one real, deliberately counted reservation, with NO provider request.
   // Never delete/reset global production usage as test cleanup.
-  await first.reserve('SERPAPI',Number(process.env.SERPAPI_MONTHLY_LIMIT || '50'));
+  await first.reserve(provider,limit);
   const fresh = supabaseUsageStore(process.env), after = await fresh.load();
-  check(after.SERPAPI.count === (before.SERPAPI?.period === after.SERPAPI.period ? before.SERPAPI.count + 1 : 1),'Durable reservation survives a fresh client/process state');
+  check(after[provider].count === (before[provider]?.period === after[provider].period ? before[provider].count + 1 : 1),'Durable reservation survives a fresh client/process state');
   let blocked = false;
-  try { await fresh.reserve('SERPAPI',Number(process.env.SERPAPI_MONTHLY_LIMIT || '50')); } catch (error) { blocked = error.status === 429; }
+  try { await fresh.reserve(provider,limit); } catch (error) { blocked = error.status === 429; }
   check(blocked,'Fresh quota client cannot bypass database cooldown');
   const anon = createClient(settings.supabaseUrl,settings.supabaseKey,{ auth:{ persistSession:false,autoRefreshToken:false },global:{ fetch:(input,init) => fetch(input,{ ...init,signal:AbortSignal.timeout(15000) }) } }); clients.push(anon);
   for (const client of [anon,...await Promise.all(['A','B'].map(async suffix => {
@@ -28,8 +30,8 @@ try {
   }))]) {
     check(Boolean((await client.from('provider_usage').select('*')).error),'Public/user credentials cannot read global provider usage');
     check(Boolean((await client.rpc('provider_usage_status')).error),'Public/user credentials cannot call quota status');
-    check(Boolean((await client.rpc('reserve_provider_usage',{ p_provider:'SERPAPI',p_limit:50 })).error),'Public/user credentials cannot consume or reset quota');
+    check(Boolean((await client.rpc('reserve_provider_usage',{ p_provider:provider,p_limit:limit })).error),'Public/user credentials cannot consume or reset quota');
   }
-  check((await fresh.load()).SERPAPI.count === after.SERPAPI.count,'Rejected reservations leave usage unchanged');
+  check((await fresh.load())[provider].count === after[provider].count,'Rejected reservations leave usage unchanged');
 } catch { console.error('FAIL: ' + checkpoint + '. No credentials or provider data emitted.'); process.exitCode = 1; }
 finally { for (const client of clients) await client.auth.signOut({ scope:'local' }).catch(() => {}); }
