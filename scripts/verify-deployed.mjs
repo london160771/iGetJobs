@@ -101,8 +101,13 @@ try {
     const query = { source:'OSM',country:'GB',city:'Bath',niche:'dentists' };
     const before=usage ? await usage.load() : null;
     const source = await request('/api/discovery/search',a,query); check(source.status === 200 && source.data.rows.length > 0,'Frontend-proxied live OSM discovery');
+    const afterSearch=usage ? await supabaseUsageStore(process.env).load() : null;
     const cached = await request('/api/discovery/search',a,query); check(cached.status === 200 && cached.data.cached,'Frontend-proxied OSM repeated query uses cache');
-    if (usage) { const after=await supabaseUsageStore(process.env).load(); check(after.OSM?.count===(before.OSM?.period===after.OSM?.period ? before.OSM.count : 0)+(source.data.cached ? 0 : 1),'Deployed OSM usage persists in Supabase; cached query consumes no extra allowance'); }
+    if (usage) {
+      const delta=afterSearch.OSM.count-(before.OSM?.period===afterSearch.OSM.period ? before.OSM.count : 0);
+      check(source.data.cached ? delta===0 : delta>=1 && delta<=3,'Deployed OSM initial/retry reservations are bounded and durable');
+      const after=await supabaseUsageStore(process.env).load(); check(after.OSM.count===afterSearch.OSM.count,'Cached OSM query consumes no extra allowance');
+    }
     await collectSource(source.data,'OSM');
   }
   if (process.argv.includes('--live-serpapi')) {

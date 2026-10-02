@@ -11,7 +11,7 @@ import { duplicateCheck, type LeadIdentity } from './dedupe.js';
 import { SupabaseLeadRepository, type LeadRepository } from './repository.js';
 import { ProviderGuard, fileUsageStore } from './usage.js';
 import { CsvAdapter } from './adapters/csv.js';
-import { OsmAdapter, defaultOsmEndpoints } from './adapters/osm.js';
+import { OsmAdapter, osmEndpoints } from './adapters/osm.js';
 import { SerpApiAdapter } from './adapters/serpapi.js';
 import type { Collection, SourceAdapter } from './adapters/types.js';
 import { RequestError } from './errors.js';
@@ -25,7 +25,7 @@ export class DiscoveryService {
   constructor(env: NodeJS.ProcessEnv, private repository: (ownerId: string, token: string) => LeadRepository, private guard: ProviderGuard, adapters?: Record<'OSM' | 'SERPAPI', SourceAdapter>) {
     this.options = discoveryOptions(env);
     this.adapters = adapters || {
-      OSM: new OsmAdapter(this.options.niches, fetch, { nominatim: env.OSM_NOMINATIM_URL?.trim() || defaultOsmEndpoints.nominatim, overpass: env.OSM_OVERPASS_URL?.trim() || defaultOsmEndpoints.overpass }),
+      OSM: new OsmAdapter(this.options.niches, fetch, osmEndpoints(env), { reserveRetry: () => guard.reserveOsmRetry() }),
       SERPAPI: new SerpApiAdapter(env.SERPAPI_API_KEY?.trim() || null, this.options.niches)
     };
   }

@@ -27,6 +27,7 @@
     "verify:quota": "node scripts/verify-quota.mjs",
     "verify:phase5:browser": "node scripts/verify-phase5-browser.mjs",
     "verify:deployed": "node scripts/verify-deployed.mjs",
+    "verify:osm:production": "node scripts/verify-production-osm.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {

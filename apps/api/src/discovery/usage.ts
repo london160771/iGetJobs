@@ -42,6 +42,10 @@ export class ProviderGuard {
   private cache = new Map<string, { value: unknown; expires: number; bytes: number }>();
   private pending = new Map<string, Promise<{ value: unknown; cached: boolean }>>();
   constructor(private store: UsageStore, private serpLimit = 50, private now = () => Date.now()) {}
+  async reserveOsmRetry() {
+    if (!this.busy) throw new RequestError(503, 'OSM retry protection is unavailable.');
+    await reserveUsage(this.store, 'OSM', 30, this.now());
+  }
   async run<T>(source: 'OSM' | 'SERPAPI', key: string, collect: () => Promise<T>): Promise<{ value: T; cached: boolean }> {
     const cached = this.cache.get(key);
     if (cached && cached.expires > this.now()) return { value: structuredClone(cached.value) as T, cached: true };
