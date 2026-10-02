@@ -8,7 +8,8 @@ import { createApp } from '../apps/api/dist/app.js';
 import { readServerEnv } from '../apps/api/dist/env.js';
 import { createServerSupabase } from '../apps/api/dist/supabase.js';
 import { createManagementService } from '../apps/api/dist/management.js';
-import { createAuditService } from '../apps/api/dist/audit/service.js';
+import { createAuditService,SupabaseAuditRepository } from '../apps/api/dist/audit/service.js';
+import { auditLead } from '../apps/api/dist/audit/engine.js';
 import { OutreachService,SupabaseOutreachRepository,createOutreachService } from '../apps/api/dist/outreach/service.js';
 import { normalizeLead } from '../apps/api/dist/discovery/normalize.js';
 import { leadToRow } from '../apps/api/dist/discovery/repository.js';
@@ -33,6 +34,7 @@ try {
   const outreach = new OutreachService((owner,token) => new SupabaseOutreachRepository(createServerSupabase(settings,token),owner),{ configured:true,lookup:async () => { hunterCalls++; return hunterMode === 'found' ? { state:'found',email:'info@clinic.com',confidence:90 } : { state:'no_result' }; } });
   const productionConfig = createOutreachService(process.env).hunter.configured;
   check(typeof productionConfig === 'boolean','Hunter configuration exposes presence only, without credentials');
+  check(!createOutreachService({ ...process.env,HUNTER_API_KEY:'' }).hunter.configured,'Missing Hunter credential disables the production adapter');
   server = createApp(createServerSupabase(settings),undefined,createAuditService(process.env),createManagementService(process.env),outreach).listen(0,'127.0.0.1'); await once(server,'listening');
   const base = 'http://127.0.0.1:' + server.address().port;
   async function request(path,account = a,body,method = 'POST') {
@@ -59,6 +61,8 @@ try {
   const ready = await request('/api/outreach?tab=Ready'); check(ready.status === 200 && ready.data.items.some(item => item.lead.id === lead.id && item.current),'Ready tab reflects a current assessed draft');
   const foreign = await request('/api/outreach/' + lead.id + '/save',b,{ expectedUpdatedAt:lead.updatedAt,subject:'Forbidden',body:'Forbidden',approve:true }); check(foreign.status === 404,'Foreign draft editing is denied');
   const old = lead.updatedAt; await action('contacted'); check(lead.status === 'Contacted' && lead.activity.at(-1).statusTo === 'Contacted','Manual Contacted persists with activity');
+  const contactedHistory = lead.activity.length, contactedAt = lead.updatedAt;
+  await action('contacted'); check(lead.activity.length === contactedHistory && lead.updatedAt === contactedAt,'Repeated Contacted action creates no duplicate activity');
   check((await request('/api/outreach/' + lead.id + '/contacted',a,{ expectedUpdatedAt:old })).status === 409,'Stale status write is rejected');
   const contacted = await request('/api/outreach?tab=Contacted'); check(contacted.data.items.some(item => item.lead.id === lead.id),'Contacted tab reflects actual state');
   const follow = await request('/api/management/leads/' + lead.id,a,{ expectedUpdatedAt:lead.updatedAt,followUpAt:'2026-10-02T12:00:00Z' },'PATCH'); check(follow.status === 200,'Existing follow-up management persists'); lead = follow.data.lead;
@@ -79,6 +83,16 @@ try {
   const direct = await a.client.from('leads').update({ email:'other@clinic.com',outreach_draft:{ forged:true } }).eq('id',lead.id).select('*').single(); check(!direct.error && direct.data.outreach_draft.stale && direct.data.outreach_draft.body,'Direct owner evidence writes cannot retain or forge current outreach');
   const leak = await b.client.from('leads').select('id,outreach_draft,contact_enrichment').in('id',created); check(!leak.error && leak.data.length === 0,'Remote RLS hides draft and enrichment data');
   check((await b.client.from('leads').update({ outreach_draft:{} }).eq('id',lead.id).select('id')).data.length === 0,'Remote RLS blocks foreign outreach mutation');
+  // Explicit HTTP fixture: exercise engine -> real JSONB persistence -> draft API,
+  // without claiming a live website returned an error or consuming provider credits.
+  const auditRepository = new SupabaseAuditRepository(createServerSupabase(settings,a.token),a.owner);
+  const current = await auditRepository.findById(lead.id);
+  const failedAssessment = await auditLead(current,undefined,defaultScoring,async url => ({ url,status:500,headers:{},body:'',bytes:0,durationMs:1,redirects:0 }));
+  lead = await auditRepository.saveAudit(current,failedAssessment);
+  const persistedFailure = (await request('/api/leads/' + lead.id)).data.lead;
+  check(persistedFailure.audit.failure === 'http' && persistedFailure.audit.metrics.status === 500,'Recorded HTTP failure survives remote JSONB reload');
+  await action('generate');
+  check(lead.outreachDraft.body.includes('responded, but the requested page could not be loaded') && !lead.outreachDraft.body.includes('did not respond'),'Persisted HTTP response generates only supported outreach wording');
   check(hunterCalls === 1,'No silent provider lookup or automated sending occurred');
 } catch { console.error('FAIL: ' + checkpoint); process.exitCode = 1; }
 finally {

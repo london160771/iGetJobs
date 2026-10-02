@@ -18,7 +18,7 @@ export function OutreachEditor({ lead, busy, blocked, onBusy, onSaved, onUncerta
     const signal = controller.current.signal; onBusy(true); setError(null); setMessage(null);
     try {
       const result = await api<{ lead:Lead }>('/api/outreach/' + lead.id + '/' + name,{ method:'POST',body:JSON.stringify({ expectedUpdatedAt:lead.updatedAt,...input }),signal });
-      if (!signal.aborted) { onDirty(false); onSaved(result.lead); }
+      if (!signal.aborted) { setEdited(false); setReplace(false); onDirty(false); onSaved(result.lead); }
     } catch (failure) {
       if (!signal.aborted) { setError(failure instanceof Error ? failure.message : 'Outreach changes failed.'); if (!(failure instanceof ApiRequestError) || ![400,429].includes(failure.status)) onUncertain(); }
     } finally { if (!signal.aborted) onBusy(false); }

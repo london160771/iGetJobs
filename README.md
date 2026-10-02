@@ -153,9 +153,11 @@ Provider references: [Nominatim search](https://nominatim.org/release-docs/lates
 
 ## Outreach drafts and contact fallback (Phase 4)
 
-Lead Detail provides deterministic NO_WEBSITE and POOR_WEBSITE drafts based on the current completed assessment. Missing-website wording refers to available listings, not proof that no site exists. Poor-site drafts include at most three failed, supported static checks, ordered by the saved audit weights; rendered mobile behavior and other unknown checks never become claims. Unreachable wording states that the failure may be temporary. No AI, provider-generated text, fake personal history or invented sender details are used.
+Lead Detail provides deterministic NO_WEBSITE and POOR_WEBSITE drafts based on the current completed assessment. Missing-website wording refers to available listings, not proof that no site exists. Poor-site drafts include at most three failed, supported static checks, ordered by the saved audit weights; rendered mobile behavior and other unknown checks never become claims. Failed checks distinguish a recorded HTTP response from DNS, connection and timeout problems without exposing technical details to the recipient. Unknown historical failures use conservative wording; no-response claims require explicit evidence. Every failure may be temporary and page quality remains unverified. No AI, provider-generated text, fake personal history or invented sender details are used.
 
 Generated drafts start pending. Edit subject/message, review the evidence, and explicitly check the review box before saving approval. Copy performs a fresh owner/timestamp/evidence check before browser clipboard access; denial/unavailable clipboard produces clear feedback and manual-copy fallback. Copy never sends anything. Regeneration requires explicit replacement confirmation for edited text. Evidence/audit/classification/scoring changes atomically preserve draft text but mark it stale and revoke approval. Reaudit/regenerate/review before copying again. Notes/status/follow-up-only changes retain unchanged drafts. No-op draft saves do not duplicate activity.
+
+Successful saves clear the editor's dirty state even when the server keeps the unchanged timestamp. Copy/manual Contacted remain available according to saved approval/state. The corrected template version requires regeneration/review for older failure drafts, preserving user text and replacement confirmation; unaffected older missing/reachable-site drafts remain usable.
 
 Outreach reads one bounded owner snapshot and paginates 20 items. Ready contains current NO_WEBSITE/POOR_WEBSITE opportunities in New/Qualified with Medium/High priority (or manual Qualified status). Contacted uses the actual Contacted stage. Follow-up Due uses the chosen local calendar day, including today, and excludes Closed/Lost. Every card shows contact data, score/classification/priority, reason, draft state/preview and explicit copy/Contacted/detail actions. Mark Contacted is a guarded manual status update, independent of sending or clipboard success.
 
@@ -188,9 +190,13 @@ npm run verify:phase2 -- --live-website
 npm run verify:phase3
 # Phase 4 drafts/approval/Contacted/staleness, remote persistence/RLS and explicit Hunter fixtures
 npm run verify:phase4
+# Optional browser regression (requires local dev app/API and a Playwright runtime):
+npm run verify:phase4:browser
 ```
 
 Live verifiers use two **confirmed, disposable** Auth accounts configured in ignored root `.env` through `SUPABASE_TEST_EMAIL_A`, `SUPABASE_TEST_PASSWORD_A`, `SUPABASE_TEST_EMAIL_B`, and `SUPABASE_TEST_PASSWORD_B`. Do not print/paste/commit their values. Accounts must have no existing `user_settings` row for the prerequisite verifier. Missing setup fails rather than being skipped. Verifiers remove only their generated test rows and end their non-persisted sessions.
+
+The optional `verify:phase4:browser` checks actual editor save/review/copy/reload/no-op behavior, manual Contacted, stale-draft refusal and desktop/tablet/mobile drawer/scrolling at five sizes. It requires an existing Playwright runtime and Chrome; the application adds no browser-testing dependency. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path/URL if it is not locally resolvable. `VERIFY_WEB_URL` may override the default `http://127.0.0.1:5173/`, restricted to loopback origins. Logs/screenshots/fixture IDs stay in ignored `.local`; only the verifier's generated lead is removed.
 
 `verify:supabase` checks live password sign-in, verified identities, persistence, bidirectional cross-user read/update/delete denial, forged inserts, owner-transfer denial, and anonymous access on both tables. `--connectivity-only` probes the schema/gateway but does not prove RLS. `verify:phase1` runs the built API on an ephemeral loopback port and checks token guards, owner-bound previews, normalized CSV storage, retry behavior, explicit source linking, uncertain duplicates, and remote isolation. Its live-source option consumes one guarded OSM attempt; wait at least 15 seconds after any other uncached OSM request and do not make concurrent quota-sensitive requests from separate API processes.
 

@@ -10,6 +10,8 @@ import { OutreachService, draftIsCurrent, evidenceKey, hunterDomain } from '../a
 import { HunterAdapter, usableEmail, type ContactAdapter } from '../apps/api/src/outreach/hunter.js';
 import type { UsageStore } from '../apps/api/src/discovery/usage.js';
 import { RequestError } from '../apps/api/src/discovery/errors.js';
+import { auditLead } from '../apps/api/src/audit/engine.js';
+import { WebsiteFetchError, type WebsiteFetchResult } from '../apps/api/src/audit/fetcher.js';
 
 const conflict = (error: unknown) => error instanceof RequestError && error.status === 409;
 function fixture(poor = false): Lead {
@@ -46,8 +48,52 @@ test('NO_WEBSITE and POOR_WEBSITE templates use only bounded recorded/static evi
   assert.equal(templateText({ ...poor,audit:null,classification:null,score:null }),null);
   assert.equal(templateText({ ...poor,classification:'ACCEPTABLE_WEBSITE' }),null);
   const unreachable = { ...poor,audit:{ ...poor.audit!,state:'unreachable' as const,checks:[{ key:'reachable',label:'Reachable',outcome:'fail' as const,evidence:'Timeout' }] } };
-  assert.match(templateText(unreachable)!.body,/may be temporary and page quality was not verified/);
+  assert.match(templateText(unreachable)!.body,/may be temporary; page quality was not verified/);
   assert.equal(worthPursuing({ ...poor,status:'Lost' }),false);
+});
+test('outreach failure findings reflect recorded HTTP, DNS, network, timeout and unknown evidence without invented causes', async () => {
+  const base = fixture(true), now = () => '2026-10-02T12:00:00Z';
+  const response = (status:number):WebsiteFetchResult => ({ url:base.website!,status,headers:{},body:'',bytes:0,durationMs:1,redirects:0 });
+  const cases = [
+    { kind:'http' as const,fetcher:async () => response(500),wording:/responded, but the requested page could not be loaded/ },
+    { kind:'http' as const,fetcher:async () => response(404),wording:/responded, but the requested page could not be loaded/ },
+    { kind:'dns' as const,fetcher:async () => { throw new WebsiteFetchError('dns','Website DNS lookup failed.'); },wording:/address could not be resolved/ },
+    { kind:'network' as const,fetcher:async () => { throw new WebsiteFetchError('network','Website connection failed.'); },wording:/encountered a connection problem/ },
+    { kind:'network' as const,fetcher:async () => { throw new WebsiteFetchError('network','Website response ended early.'); },wording:/encountered a connection problem/ },
+    { kind:'timeout' as const,fetcher:async () => { throw new WebsiteFetchError('timeout','Website audit timed out.'); },wording:/check timed out before it could finish/ }
+  ];
+  for (const entry of cases) {
+    const assessment = await auditLead(base,undefined,defaultScoring,entry.fetcher,now), lead = { ...base,...assessment };
+    assert.equal(assessment.audit.failure,entry.kind); assert.equal(lead.classification,'POOR_WEBSITE');
+    const draft = templateText(lead)!; assert.match(draft.body,entry.wording);
+    assert.doesNotMatch(draft.body,/did not respond|No response was received|HTTP 500|HTTP 404|DNS|ECONN|not mobile.friendly/i);
+    assert.deepEqual(templateText(lead),draft);
+    assert.deepEqual(await auditLead(base,undefined,defaultScoring,entry.fetcher,now),assessment);
+    // Existing stored audits without the new field use their measured status or
+    // exact previously emitted evidence, never a guessed diagnosis.
+    const { failure: _failure,...legacy } = assessment.audit; void _failure;
+    assert.match(templateText({ ...lead,audit:legacy })!.body,entry.wording);
+  }
+  const unknown = { ...base,audit:{ ...base.audit!,state:'unreachable' as const,checks:[{ key:'reachable',label:'Reachable',outcome:'fail' as const,evidence:'Unknown historical failure' }] } };
+  assert.match(templateText(unknown)!.body,/could not be checked successfully/);
+  assert.doesNotMatch(templateText(unknown)!.body,/did not respond|No response|timed out|connection problem|resolved/);
+  assert.match(templateText({ ...unknown,audit:{ ...unknown.audit,checks:[{ ...unknown.audit.checks[0]!,evidence:'No response received.' }] } })!.body,/No response was received/);
+  const contradictory = { ...unknown,audit:{ ...unknown.audit,failure:'dns' as const,metrics:{ status:500,durationMs:1,bytes:0,redirects:0 } } };
+  assert.match(templateText(contradictory)!.body,/responded, but/); assert.doesNotMatch(templateText(contradictory)!.body,/could not be resolved/);
+});
+test('old failure drafts require regeneration/review without overwriting saved text or invalidating unaffected drafts', async () => {
+  const model = memory(fixture(true));
+  let lead = await model.service.generate('A','token',model.get().id,{ expectedUpdatedAt:model.get().updatedAt });
+  const legacy = { ...lead,outreachDraft:{ ...lead.outreachDraft!,version:'outreach-v1',edited:true,body:'Saved user text',approval:'approved' as const } };
+  assert.ok(currentDraft(legacy));
+  const failed = { ...legacy,audit:{ ...legacy.audit!,state:'unreachable' as const,checks:[{ key:'reachable',label:'Reachable',outcome:'fail' as const,evidence:'Audit request returned HTTP 500.' }],metrics:{ status:500,durationMs:1,bytes:0,redirects:0 } } };
+  model.set(failed); assert.equal(currentDraft(failed),false);
+  assert.equal(failed.outreachDraft.body,'Saved user text');
+  await assert.rejects(model.service.copy('A','token',failed.id,{ expectedUpdatedAt:failed.updatedAt }),conflict);
+  await assert.rejects(model.service.generate('A','token',failed.id,{ expectedUpdatedAt:failed.updatedAt }),conflict);
+  lead = await model.service.generate('A','token',failed.id,{ expectedUpdatedAt:failed.updatedAt,replaceEdited:true });
+  assert.ok(currentDraft(lead)); assert.equal(lead.outreachDraft?.approval,'pending');
+  assert.match(lead.outreachDraft!.body,/responded, but/);
 });
 test('generation/edit/replacement/approval/copy use owner and timestamp guards and detect changed evidence', async () => {
   const model = memory(), id = model.get().id, service = model.service;

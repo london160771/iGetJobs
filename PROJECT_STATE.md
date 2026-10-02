@@ -4,6 +4,8 @@
 
 Phases 0–3 are approved and complete, including all reviewed fixes. The user authorized Phase 4 only. Deterministic outreach drafts, explicit review/edit/copy actions, manual Contacted tracking, and guarded Hunter contact fallback are implemented. Evidence changes atomically preserve user text but mark drafts stale and revoke approval. The user applied the fourth migration. **Stop for Phase 4 review. Phase 5 has not started.**
 
+The two Phase 4 review fixes are implemented: failure wording now follows recorded HTTP/DNS/network/timeout evidence, and successful no-op draft saves clear editor dirty state. The separate fix verification/publication is recorded below; Phase 4 remains pending review.
+
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
 ## Source of truth and locked scope
@@ -210,9 +212,25 @@ Approved base: b9f3e0a9ea0c0653f4a9286022c85df1bc6eb22b. Scope: outreach prepara
 - Live Hunter provider verification is pending because no real Free-plan credential is configured; provider transport/quota cases use explicit fixtures, not fabricated live claims. Its official account/authentication/free-plan documentation was checked; production lookup remains disabled until configured.
 - Changed file groups: shared outreach contracts/templates/clipboard helper; isolated API outreach/Hunter service and wiring; Lead Detail editor/Outreach screen/styles/routing; fourth SQL migration; outreach regression tests/live verifier/package script; API env example, README and this state. SPEC.md, DESIGN.md, PLAN.md, shell/drawer, discovery, audit engine and management APIs are unchanged.
 
+## Phase 4 review fixes — 2026-10-02
+
+Reviewed base: 17cb0da0bd99100c84152a2e404931611983d049. Authorized scope: the two reviewed outreach issues only, followed by checks, a separate commit/push and review stop. Phase 5 has not started.
+
+- Audits record an optional HTTP/DNS/network/timeout failure category in the existing JSONB assessment. Classification/scoring, fetching limits and destination protections are unchanged; no migration is required. Drafts distinguish an actual HTTP response from resolution, connection or timeout problems in plain language. Exact older engine evidence and measured status remain supported; unknown failures use a conservative generic finding, and no-response claims require explicit evidence. No root cause, page quality or rendered behavior is invented.
+- Outreach template version v1.1 makes older failure drafts review-required, with API approval/copy blocked until regeneration/review. Stored text is preserved; replacing saved user edits still requires explicit confirmation. Unaffected older NO_WEBSITE/reachable-site drafts retain compatibility. Existing evidence-change invalidation and owner/timestamp guards remain intact.
+- Every successful editor action clears local edited/replacement/dirty flags and uses the returned server lead. Unchanged saves no longer depend on a changed timestamp/remount to re-enable approved Copy and manual Contacted. Failed/stale writes retain edits and require existing recovery; no server persistence or approval guard is weakened.
+- Added unit regressions for HTTP 500/404, DNS, connection failure/early response termination, timeout, explicit no-response and unknown historical evidence, measured-status precedence, repeated determinism, legacy draft compatibility and user-text preservation. A tracked optional Playwright browser verifier exercises edit → restore original → save with unchanged timestamp/history, re-enabled Copy/Contacted, retained approval/text, clipboard success and replacement confirmation. It uses an existing external runtime; no app dependency is added.
+- npm run check: PASS — 68/68 tests, zero-warning lint, typecheck including tests and shared/API/web builds. Existing discovery/audit/management/Hunter/security/worker regressions remain passing. The approximately 500KB Vite chunk advisory remains non-blocking.
+- npm run verify:phase4: PASS remotely — Auth/protected routes, owner/anonymous RLS, edited drafts, approval, stale writes, atomic invalidation, persisted contact fallback fixtures and unchanged lookup protection. Added checks prove repeated Contacted actions leave timestamp/activity unchanged, a missing Hunter credential disables the adapter, and injected HTTP 500 evidence survives remote JSONB reload and produces accurate draft wording through the authenticated API. Only generated fixture records are cleaned up; no live Hunter request or outreach sending occurs.
+- npm run verify:phase4:browser: PASS — actual approved draft edit/restore/no-op save keeps timestamp/history unchanged and re-enables Copy/Mark Contacted without discard/reload; saved text/approval remain intact and clipboard succeeds. Replacement confirmation, Ready/Contacted, invalidation/old-tab copy rejection, preserved stale text and the no-domain Hunter guard still work. Two completed runs pass at 1280×720, 768×1024, 390×844, 320×740 and 844×320 with no document/horizontal overflow, one active workspace scroller, fixed desktop/tablet sidebar and mobile drawer focus/background lock/Escape/backdrop closure. A bounded geometry wait verifies the drawer is fully off-canvas before screenshots. Only the generated browser fixture is deleted and sessions are signed out; artifacts remain ignored.
+- Final lint: PASS after the browser assertion was added. Secret scan: PASS — actual local configuration absent from 96 publishable files and Git history; private/test credentials absent from 12 web output files. Env/usage/build/log/screenshot/journal artifacts remain ignored. Static checks find no sending integration; the only Hunter transport operations remain explicitly invoked account/domain-search reads.
+- Changed file groups: shared audit/outreach contracts/wording, audit failure recording, editor state reset, unit/live/browser regressions and package script, README and this state. No schema/RLS, layout/drawer, Hunter adapter, discovery, management, SPEC.md, DESIGN.md or PLAN.md change. Stop before Phase 5 for review.
+
 ## Limitations and Phase 5 handoff
 
 Phases 0–3 are approved; Phase 4 review is pending. No remaining Supabase prerequisite blocker. Live Hunter and SerpAPI remain unverified because provider credentials are not configured; their free-tier transport safeguards pass fixture tests and enrichment/discovery remain disabled respectively. OSM satisfies the live discovery criterion. Verify a real Free-plan account before enabling/relying on either optional provider. Hunter cannot enrich NO_WEBSITE leads without an audited domain; manual contact entry remains available.
+
+Live Hunter verification is non-blocking while Hunter remains disabled. Before enabling it later, verify a real Free-plan credential first. Deployment must preserve single-API-process quota guards and durable provider/Hunter usage files; do not deploy replicas or ephemeral usage storage under the current guard design.
 
 This personal architecture uses one API process. Persist .local/provider-usage.json and .local/hunter-usage.json across restarts; do not reset them to bypass caps. Previews/cache/locks are process-local and do not support replicas. A preview expires after 30 minutes or API restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate/management/outreach reads 2,000 owner records, legacy saved read view latest 100, history 100 provenance records/lead. Failures are explicit; uncertain records never silently merge. OSM coverage/bounding boxes require relevance review.
 
@@ -243,6 +261,8 @@ Phase 3 commit message: feat: implement owner-scoped lead management. Target: or
 Separate Phase 3 review-fix commit message: fix: stabilize Phase 3 snapshots, workers, and field limits. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 4.
 
 Phase 4 commit message: feat: implement reviewed outreach drafts and guarded contact enrichment. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 5.
+
+Separate Phase 4 review-fix commit message: fix: align outreach failure wording and reset saved editor state. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 5.
 
 ## Last updated
 

@@ -30,6 +30,8 @@ export interface WebsiteAudit {
   checks: AuditCheck[];
   version?: string;
   state?: 'missing' | 'reachable' | 'unreachable';
+  /** Recorded fetch failure, never inferred from an opportunity score. */
+  failure?: 'http' | 'dns' | 'network' | 'timeout';
   requestedWebsite?: string | null;
   evidence?: WebsiteEvidence[];
   classificationReasons?: string[];
