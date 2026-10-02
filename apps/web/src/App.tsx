@@ -25,7 +25,7 @@ function ApiStatus() {
     const controller = new AbortController();
     async function check() {
       try {
-        const response = await fetch('/api/health', { signal: controller.signal });
+        const response = await fetch('/api/health', { signal: AbortSignal.any([controller.signal,AbortSignal.timeout(90000)]) });
         if (!response.ok) throw new Error('API unavailable');
         const health = await response.json() as HealthResponse;
         if (health.status !== 'ok' || health.service !== 'igetjobs-api') throw new Error('Unexpected response');
@@ -128,7 +128,7 @@ function AppShell() {
         <div className="topbar-location"><button ref={menuRef} className="menu-button" aria-label="Open navigation" aria-controls="workspace-navigation" aria-expanded={drawerOpen} onClick={() => setDrawerLocation(location.key)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button><span><span className="muted breadcrumb-workspace">Workspace</span><span className="breadcrumb-divider">/</span>{current?.label || (location.pathname.startsWith('/leads/') ? 'Lead detail' : 'Page not found')}</span></div>
         <div className="topbar-actions"><ApiStatus /><button className="text-button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? 'Signing out…' : 'Sign out'}</button></div>
       </header>
-      <div className="workspace-content">
+      <div className="workspace-content" role="region" aria-label="Workspace content" tabIndex={0}>
         <main ref={mainRef} id="main" tabIndex={-1}>{signOutError && <p className="form-error" role="alert">Sign-out failed. Please try again.</p>}<Suspense fallback={<p role="status">Loading workspace…</p>}><Outlet /></Suspense></main>
         <footer className="workspace-footer">Find the right businesses. Build better websites.</footer>
       </div>

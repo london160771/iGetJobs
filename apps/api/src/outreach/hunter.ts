@@ -1,6 +1,6 @@
 import type { ContactEnrichment } from '@igetjobs/shared';
 import { RequestError } from '../discovery/errors.js';
-import type { UsageStore } from '../discovery/usage.js';
+import { reserveUsage, type UsageStore } from '../discovery/usage.js';
 
 export function usableEmail(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 254 && /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[a-z0-9.-]+\.[a-z]{2,63}$/i.test(value);
@@ -34,12 +34,7 @@ export class HunterAdapter implements ContactAdapter {
     if (this.busy) throw new RequestError(429, 'Another Hunter lookup is running.');
     this.busy = true;
     try {
-      const usage = await this.store.load(), previous = usage.HUNTER, period = new Date(this.now()).toISOString().slice(0,7);
-      if (previous && this.now() - previous.lastCall < 5000) throw new RequestError(429, 'Wait five seconds before another Hunter lookup.');
-      const count = previous?.period === period ? previous.count : 0;
-      if (count >= this.limit) throw new RequestError(429, 'The local monthly Hunter attempt cap is exhausted.');
-      usage.HUNTER = { period, count: count + 1, lastCall: this.now() };
-      await this.store.save(usage); // Reserve before network I/O; failures/no-result consume attempts.
+      await reserveUsage(this.store,'HUNTER',this.limit,this.now());
       const account = await this.json('account');
       if (account.plan_name !== 'Free' || (account.plan_level !== undefined && account.plan_level !== 0)) throw new RequestError(403, 'Only a verified Hunter Free account is allowed.');
       const requests = account.requests as Record<string, unknown> | undefined;

@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Phases 1–4 implemented:** authenticated discovery, conservative duplicate review, Supabase persistence, safe website auditing, deterministic classification/scoring, lead management, reviewed outreach drafts and explicit contact fallback. New leads remain unclassified and unscored until an audit completes. Stop for Phase 4 review before Phase 5.
+**Phases 0–4 approved. Phase 5 preparation in progress:** V1 polish, accessibility, security, durable database quotas and deployment configuration. Production deployment and final deployed smoke tests are pending account/schema setup. New leads remain unclassified and unscored until an audit completes. No V2 work.
 
 ## Local setup
 
@@ -30,7 +30,7 @@ Use a Supabase free project. Configure its URL and **publishable key** (legacy *
 
 The ANON_KEY alias accepts publishable and legacy anon formats. If both key aliases are present, their values must agree. Vite loads root values, then web workspace values, then process variables. The API loads root and API env files without overriding existing process variables; a server-specific pair takes precedence and must be complete. Each URL/key pair is optional together, and malformed configuration fails without echoing values.
 
-Only the validated public URL/key enter the browser bundle. Provider keys, test account credentials, and database credentials are excluded even when present in the root env. Public keys are required for the Supabase browser SDK; authenticated tokens and RLS authorize data access. Secret/service-role keys are rejected by both app clients. The backend creates separate user-token clients, disables session persistence/refresh, and bounds Supabase requests to 15 seconds. No admin key is required.
+Only validated public configuration enters the browser bundle. Provider keys, test credentials, and database credentials are excluded even from the root env. Lead/settings clients use public keys and user JWTs through owner RLS; they reject secret/service-role keys. Production requires a separate server-only `SUPABASE_QUOTA_SERVICE_KEY`, confined to `apps/api/src/quota.ts` for quota RPCs and never passed to lead/settings clients or Vercel. Server Supabase requests remain bounded at 15 seconds with no persisted sessions.
 
 Run `supabase/migrations/202610010001_auth_and_leads.sql` once through the project owner's SQL Editor or your migration tooling. It is transactional and deliberately fails if its tables already exist, rather than modifying an unknown schema. **The current project migration has already been applied; do not rerun it.**
 
@@ -42,7 +42,7 @@ Also apply `supabase/migrations/202610010003_management_snapshot.sql` once befor
 
 Apply `supabase/migrations/202610020004_outreach.sql` once for Phase 4. It adds bounded contact-enrichment attempt state, an owner-scoped outreach snapshot and a draft-staleness/history trigger. **All four migrations are applied and remotely verified in the current project; do not rerun them.** Existing ownership/RLS remains unchanged.
 
-Use a confirmed email/password account at `/login`. All workspace routes require an Auth-verified session, including restored sessions. The top bar signs out locally. The Node API independently verifies every protected bearer token with Supabase Auth and uses that token for database operations. `/api/health` reports API availability/configuration only; it does not prove a live database connection.
+Sign in at `/login` or select Create an account. Signup may require email confirmation; provider errors use generic feedback. Configure Supabase's Site URL before testing deployed confirmation. All workspace routes require an Auth-verified session, including restored sessions. The Node API independently verifies every protected bearer token for owner-scoped data operations. Sign-out is local. `/api/health` reports API availability/configuration, not live lead access.
 
 ## Discovery workflow
 
@@ -74,9 +74,9 @@ Copy `apps/api/.env.example` to `apps/api/.env` only when needed; keep all crede
 - **SerpAPI:** optional server-only `SERPAPI_API_KEY`; unavailable in the UI until configured. Every uncached search first checks the account API and accepts only an active, verifiable free plan with remaining monthly/hourly allowance. It makes one Google Maps result-page request, without automatic retries/pagination. `SERPAPI_MONTHLY_LIMIT` defaults to 50 local attempts; the provider's remaining allowance is also enforced. Tests cover the adapter and free-plan guards; a live SerpAPI credential was not supplied for this phase.
 - **CSV:** manual local import; no discovery-provider quota.
 
-One live provider request runs at a time; identical in-flight requests share their result. Failed attempts are charged locally before network I/O. Provider responses/timeouts are bounded. Usage counts persist in ignored `.local/provider-usage.json`; failed/corrupt storage blocks discovery. Keep this directory writable and durable, and **do not delete it to reset quotas**.
+One live discovery request runs at a time; identical in-flight requests share results. Attempts reserve allowance before network I/O, including failures. Production uses a row-locked Supabase RPC and database UTC periods/cooldowns; failed storage blocks calls. Development uses ignored `.local/provider-usage.json` unless `SUPABASE_QUOTA_SERVICE_KEY` is configured. Production never falls back to files or memory. Never reset usage to bypass caps.
 
-Run one API process for this personal workspace. The quota file, previews, and locks do not coordinate multiple processes/replicas. Distributed operation is outside the current architecture. Duplicate checks inspect at most 2,000 owner records and fail clearly above that limit. Source history is limited to 100 provenance records per lead; simultaneous metadata updates use an optimistic timestamp check. Provenance equality recursively sorts object keys, retains array order, and preserves genuinely different values. Repeated links remain idempotent after PostgreSQL JSONB reorders keys.
+Run one API process. Production database quotas are atomic; previews, caches, request locks and audit workers remain process-local. Replica operation is outside this architecture. Duplicate checks cap at 2,000 owner records and fail clearly above it. Source history caps at 100 records per lead with optimistic writes. Provenance equality ignores object key order, preserves array order and different values, and stays idempotent after JSONB round trips.
 
 ## Website audit and scoring (Phase 2)
 
@@ -141,8 +141,10 @@ Backend configuration:
 | `DISCOVERY_NICHES_JSON` | Optional list of `{id,label,tags:[[key,value]]}`; all nine SPEC starter niches by default |
 | `SERPAPI_API_KEY` | Optional free-plan provider credential, server only |
 | `SERPAPI_MONTHLY_LIMIT` | Local monthly attempt cap (default 50); never overrides provider allowance |
-| `HUNTER_API_KEY` | Optional Free-plan fallback credential, server only; lookups require user action |
+| `HUNTER_API_KEY` | Optional server-only fallback credential; a key alone does not enable lookup |
+| `HUNTER_FREE_PLAN_VERIFIED` | Default false; set exactly `true` only after real Free-plan credential verification |
 | `HUNTER_MONTHLY_LIMIT` | Durable monthly fallback attempt cap (default 10, maximum 50) |
+| `SUPABASE_QUOTA_SERVICE_KEY` | Render only: private quota RPC credential, never an app/public key |
 | `OSM_NOMINATIM_URL`, `OSM_OVERPASS_URL` | Optional HTTPS endpoint overrides, without credentials/query strings/fragments; switch providers through env/restart |
 | `HOST`, `PORT` | Default `127.0.0.1`, `3001` |
 | `AUDIT_SCORING_JSON` | Optional full numeric audit/scoring policy; defaults and validation above |
@@ -161,11 +163,11 @@ Successful saves clear the editor's dirty state even when the server keeps the u
 
 Outreach reads one bounded owner snapshot and paginates 20 items. Ready contains current NO_WEBSITE/POOR_WEBSITE opportunities in New/Qualified with Medium/High priority (or manual Qualified status). Contacted uses the actual Contacted stage. Follow-up Due uses the chosen local calendar day, including today, and excludes Closed/Lost. Every card shows contact data, score/classification/priority, reason, draft state/preview and explicit copy/Contacted/detail actions. Mark Contacted is a guarded manual status update, independent of sending or clipboard success.
 
-Hunter is an isolated **explicit fallback**. Set `HUNTER_API_KEY` only in ignored root/API env, never a VITE variable. Without it, enrichment is disabled. `HUNTER_MONTHLY_LIMIT` is a conservative local attempt cap (default 10, maximum 50); usage persists in ignored `.local/hunter-usage.json`. Keep that file across restarts and run one API process. Failed/no-result/uncertain attempts are counted before network I/O; one global lookup and a five-second cooldown protect the free tier. The account API must report a Free plan and verifiable remaining credits before Domain Search. Extra allocations over the free ceiling are declined. See the official [account/domain API reference](https://hunter.io/api-documentation/v2) and [Free Plan limits](https://help.hunter.io/en/articles/11060999-what-s-included-in-hunter-s-free-plan).
+Hunter is an isolated **explicit fallback**. A server-only `HUNTER_API_KEY` and `HUNTER_FREE_PLAN_VERIFIED=true` are both required. Verify a real Free-plan credential before setting the flag; each lookup still verifies the account and credits. The cap defaults to 10 and cannot exceed 50. Production reserves attempts atomically in Supabase; development may use ignored `.local/hunter-usage.json`. Failed/no-result attempts count before network I/O; one global lookup and a five-second cooldown protect the free tier. Extra allocations over the free ceiling are declined. See the [account/domain reference](https://hunter.io/api-documentation/v2) and [Free Plan limits](https://help.hunter.io/en/articles/11060999-what-s-included-in-hunter-s-free-plan).
 
 Only worthwhile assessed leads without a usable email qualify. A domain must come from the explicitly audited preserved website; no company-name guess is made for NO_WEBSITE leads with no domain. The lookup requests one generic contact, has no pagination/retry/verification charge, uses a secret header on a fixed HTTPS endpoint, declines redirects, and bounds time/response size. Only a matching-domain, syntactically valid generic email with provider confidence ≥80 is saved as a **candidate**, not a delivery guarantee. Raw provider data, key, personal names and source URLs are discarded. “Use email” is explicit, never overwrites a usable email, and clears assessment/scoring and marks the draft stale because contactability affects scoring.
 
-Per-lead attempt fingerprints and pending/found/no-result/quota/error outcomes persist in Supabase under owner RLS. An unchanged lead cannot be silently looked up again after no result, restart or uncertain response; the user must explicitly retry. Stale/uncertain writes require reload. The live verifier injects clearly labeled provider fixtures; live Hunter remains unverified until a real Free-plan credential is configured. There are no Hunter sequences, mailboxes, sending, CRM, automatic DMs, voice, campaigns or Phase 5 deployment work.
+Per-lead attempt fingerprints and pending/found/no-result/quota/error outcomes persist in Supabase under owner RLS. An unchanged lead cannot be silently looked up again after no result, restart or uncertain response; the user must explicitly retry. Stale/uncertain writes require reload. The live verifier injects clearly labeled provider fixtures; live Hunter remains unverified until a real Free-plan credential is configured. There are no Hunter sequences, mailboxes, sending, CRM, automatic DMs, voice, campaigns or V2 features.
 
 ## Verification and build
 
@@ -192,6 +194,13 @@ npm run verify:phase3
 npm run verify:phase4
 # Optional browser regression (requires local dev app/API and a Playwright runtime):
 npm run verify:phase4:browser
+# Global quota migration/reservation/restart and public/user RPC denial:
+npm run verify:quota
+# All V1 screens, responsive overflow, WCAG and keyboard drawer:
+npm run verify:phase5:browser
+# Built/deployed API workflow with real public fixture audits; optional one OSM search:
+npm run verify:deployed -- --live-source
+npm run secret:scan
 ```
 
 Live verifiers use two **confirmed, disposable** Auth accounts configured in ignored root `.env` through `SUPABASE_TEST_EMAIL_A`, `SUPABASE_TEST_PASSWORD_A`, `SUPABASE_TEST_EMAIL_B`, and `SUPABASE_TEST_PASSWORD_B`. Do not print/paste/commit their values. Accounts must have no existing `user_settings` row for the prerequisite verifier. Missing setup fails rather than being skipped. Verifiers remove only their generated test rows and end their non-persisted sessions.
@@ -204,7 +213,7 @@ The optional `verify:phase4:browser` checks actual editor save/review/copy/reloa
 
 `verify:phase3` signs in both disposable accounts and runs the built management/audit API on an ephemeral loopback port. It checks more than 200 records, concurrent insert/snapshot/count coherence, boundary-label save/filter behavior, anonymous/cross-user RPC denial, pagination/filtering/sorting, seven persisted stages, notes/follow-up changes and clearing, unchanged assessment retention, stale/injected/foreign write rejection, idempotent history, URL sanitization and atomic invalidation. Only its generated fixture IDs are removed; an ignored UUID-only recovery journal supports interrupted cleanup.
 
-Unit tests execute all four actual migrations in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. `npm test` compiles tests and their API imports to ignored `.local/test-build`, then runs only current test files sequentially with a 30-second per-test watchdog. HTML workers use compiled JavaScript, matching production rather than paying TypeScript-loader startup on every test. Readiness waits are bounded and inspections settle only after worker termination on success/error/timeout. Production limits remain five seconds for startup, 750ms for inspection, and the existing HTML/tree/text/heap bounds. These tests complement remote checks; the app uses only Supabase for persistence. Coverage includes outreach templates/approval/clipboard/edits/invalidation, Hunter eligibility/quota/retry/no-result, snapshot races/coherence/caps/RLS, shared input boundaries, filters/sorting/counts, notes/status/follow-up/history, atomic invalidation, owner/timestamp guards, deterministic audits/scoring, evidence, SSRF/redirect/rebinding/bounds, discovery/CSV/dedupe/retries/quotas and safe Auth/API errors.
+Unit tests execute all five actual migrations in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. `npm test` compiles tests and their API imports to ignored `.local/test-build`, then runs only current test files sequentially with a 30-second per-test watchdog. HTML workers use compiled JavaScript, matching production rather than paying TypeScript-loader startup on every test. Readiness waits are bounded and inspections settle only after worker termination on success/error/timeout. Production limits remain five seconds for startup, 750ms for inspection, and the existing HTML/tree/text/heap bounds. These tests complement remote checks; the app uses only Supabase for persistence. Coverage includes outreach templates/approval/clipboard/edits/invalidation, Hunter eligibility/quota/retry/no-result, snapshot races/coherence/caps/RLS, shared input boundaries, filters/sorting/counts, notes/status/follow-up/history, atomic invalidation, owner/timestamp guards, deterministic audits/scoring, evidence, SSRF/redirect/rebinding/bounds, discovery/CSV/dedupe/retries/quotas and safe Auth/API errors.
 
 Build order: shared contracts → API → web. Outputs: `packages/shared/dist`, `apps/api/dist`, `apps/web/dist`. After building, production smoke tests can use two terminals:
 
@@ -213,7 +222,25 @@ npm run start -w @igetjobs/api
 npm run preview -w @igetjobs/web
 ```
 
-Web preview is http://127.0.0.1:4173 with the local API proxy. A real deployment needs a reverse proxy for `/api`, SPA fallback, and durable local usage storage; deployment remains Phase 5.
+Web preview is http://127.0.0.1:4173 with the local API proxy. Set `VERIFY_WEB_URL=http://127.0.0.1:4173/` for built-asset browser checks. Optional `SERVE_WEB=true` serves the built React app through the Node API for local combined-build checks; Render does not use it.
+
+## Approved deployment: Vercel Free + Render Free + Supabase
+
+No paid disk or extra database is required. Render's free filesystem is ephemeral; quota state uses the existing Supabase project. [Render documents free-service limitations](https://render.com/docs/free). Keep one API process/instance: previews, caches and locks remain process-local.
+
+Vercel's [Hobby plan](https://vercel.com/docs/plans/hobby) is restricted to personal, non-commercial use. A personal demonstration must meet that policy; using this client-acquisition app for commercial work may require another approved frontend host. Do not silently upgrade to a paid plan. Confirm eligibility before business production use.
+
+### Manual setup before deployment
+
+1. **Supabase SQL Editor:** apply `supabase/migrations/202610020005_provider_usage.sql` once. The earlier four migrations are already applied. Global `provider_usage` has forced RLS and no public/user table grants. Only `service_role` can execute the two quota RPCs. They cannot touch leads/settings, reset counts, accept a caller-supplied clock/period or change ownership. Reservations lock the provider row, then check UTC period/cooldown/cap before consuming allowance.
+2. **Supabase API Keys:** obtain a secret key or legacy service_role key. Store it as `SUPABASE_QUOTA_SERVICE_KEY` in ignored local `.env` and Render's private environment. Never put it in chat, Git, Vercel or VITE variables. It is privileged at project level; the quota module confines its use to the two RPCs. Lead/settings clients retain public keys/user JWTs/RLS.
+3. **Live quota gate:** `npm run build && npm run verify:quota`. This consumes one database SerpAPI reservation without contacting SerpAPI, checks fresh-client restart/cooldown behavior, and verifies anonymous/both users cannot access quota state. Do not delete/reset production quota rows as cleanup. Missing setup fails explicitly.
+4. **Render dashboard:** connect `london160771/iGetJobs`; create a Blueprint from root `render.yaml`, or a Free Node Web Service named `igetjobs-api` with its commands. Repository root directory: `.`. Keep Free plan, one instance, no autoscaling/cron/worker/disk. Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and private `SUPABASE_QUOTA_SERVICE_KEY`. Leave provider keys unset and `HUNTER_FREE_PLAN_VERIFIED=false`. Render supplies `PORT`; `HOST=0.0.0.0` and `/api/health` are configured. Startup requires working quota RPCs with no filesystem fallback. Record the actual API HTTPS URL.
+5. **Vercel dashboard:** import the same repository on Free/Hobby as `igetjobs`, root directory `.`, Node 22. `vercel.json` sets workspace build, `apps/web/dist`, security headers, SPA fallback and external `/api` proxy. Set ONLY `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never copy root/server/test credentials. The proxy currently targets `https://igetjobs-api.onrender.com`; change it before deploying if Render assigns another hostname. [External rewrites](https://vercel.com/docs/routing/rewrites) keep API calls on the frontend origin without wildcard CORS.
+6. **Supabase Auth → URL Configuration:** use the actual frontend HTTPS origin as Site URL and allow its confirmation redirect origin. Test signup using an inbox you control. Automated local signup verification uses an explicitly injected response fixture; it does not claim delivered confirmation mail.
+7. **Deployed smoke gate:** once accounts/configuration are ready, set `VERIFY_WEB_URL` to the actual `https://igetjobs….vercel.app/` origin and run `npm run verify:phase5:browser` using local disposable account credentials and an optional Playwright runtime, then `npm run verify:deployed -- --live-source` sequentially. Verify CSV/save/dedupe, OSM/cache, three classifications/scoring, filters/notes/status/follow-up/counts, reviewed drafts/copy/Contacted, logout/login and cross-user isolation on the deployed API. The poor public fixture is a measured HTTP 404; its page quality is explicitly unverified. Public pages can change, so a failed live assertion requires evidence review rather than fabricated results. The earlier phase verifiers run local built APIs against real Supabase; they are regression evidence, not deployed smoke tests. Do not mark Phase 5 complete until deployment and smoke tests pass.
+
+Free Render can sleep/cold-start and reset previews/caches, but database quota survives. Client requests are bounded at three minutes to allow a cold start and bounded discovery; uncertain saves retain retry/stale-write safeguards. Strict worker/fetch bounds remain intact and may decline busy/unsupported pages without inventing evidence. Optional Hunter/SerpAPI remain unverified and disabled. Account/schema setup, real signup confirmation and deployed end-to-end verification are pending; no deployment URL is claimed yet.
 
 ## Structure and phase boundary
 
@@ -226,6 +253,6 @@ scripts/             Safe live Supabase and Phases 1–4 verification
 tests/               Foundation, discovery, audit/security, management/outreach and SQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet uses a fixed left sidebar and top bar with one scrolling content outlet. Mobile uses the same vertical sidebar in a hidden off-canvas drawer, opened by the top-bar menu button; never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains and restores keyboard focus, and locks background scrolling. On short screens only the open drawer scrolls to keep navigation and its footer accessible. Phase 4 adds reviewed drafts, manual copy/Contacted actions and guarded contact fallback; Phase 5 has not started.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet retains fixed navigation/header with one keyboard-focusable content scroller. Mobile keeps the same hidden off-canvas sidebar, never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains/restores focus and locks background scrolling. On short screens the open drawer alone may scroll to keep all items/footer accessible. Phase 5 deployment preparation is in progress; no V2 work.
 
-Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish each approved phase with checks, state update, separate commit/push, and review before proceeding. React, Node.js, Supabase, free tiers. Hunter is explicit fallback only. No Next.js, MongoDB, AI, automatic outreach, paid dependency, or V2 features. Stop before Phase 5.
+Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish approved work with checks, state update, separate commit/push, and review. React, Node.js, Supabase, free tiers. Hunter is explicit fallback only. No Next.js, MongoDB, AI, automatic outreach, paid dependency, or V2 features. Stop for final V1 review after Phase 5 deployment verification.

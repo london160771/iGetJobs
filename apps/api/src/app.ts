@@ -9,10 +9,19 @@ import type { AuditService } from './audit/service.js';
 import { auditRoutes } from './audit/routes.js';
 import { managementRoutes, type ManagementService } from './management.js';
 import { outreachRoutes, type OutreachService } from './outreach/service.js';
+import { serveFrontend } from './frontend.js';
 
-export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService) {
+export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }) {
   const app = express();
   app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
+  app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   app.use(express.json({ limit: '100kb' }));
   app.get('/api/health', (_req, res) => {
     const health: HealthResponse = {
@@ -34,6 +43,7 @@ export function createApp(supabase: SupabaseClient | null, discovery?: Discovery
   app.use('/api/leads', requireAuth(supabase), auditRoutes(audit));
   app.use('/api/management', requireAuth(supabase), managementRoutes(management));
   app.use('/api/outreach', requireAuth(supabase), outreachRoutes(outreach));
+  if (frontend) serveFrontend(app, frontend.directory, frontend.supabaseUrl);
   app.use((_req, res) => {
     const body: ApiError = { error: 'Route not found.' };
     res.status(404).json(body);

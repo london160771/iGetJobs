@@ -23,11 +23,16 @@
     "verify:phase3": "node scripts/verify-phase3.mjs",
     "verify:phase4": "node scripts/verify-phase4.mjs",
     "verify:phase4:browser": "node scripts/verify-phase4-browser.mjs",
+    "secret:scan": "node scripts/secret-scan.mjs",
+    "verify:quota": "node scripts/verify-quota.mjs",
+    "verify:phase5:browser": "node scripts/verify-phase5-browser.mjs",
+    "verify:deployed": "node scripts/verify-deployed.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^10.0.1",
+    "axe-core": "^4.13.0",
     "concurrently": "^9.2.0",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.0.0",

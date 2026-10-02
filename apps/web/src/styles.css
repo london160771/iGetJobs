@@ -96,11 +96,12 @@ nav { display: flex; flex-direction: column; gap: 6px; }
 .nav-link { display: flex; align-items: center; gap: 14px; border-radius: 7px; padding: 13px 14px; color: #55665e; font-size: .86rem; }
 .nav-link:hover { background: #f4f7f5; }
 .nav-link.active { background: #e9f3ef; color: #126759; font-weight: 600; }
-.nav-number { font-size: .64rem; font-variant-numeric: tabular-nums; opacity: .8; }
+.nav-number { font-size: .64rem; font-variant-numeric: tabular-nums; }
 .sidebar-footer { margin-top: auto; padding: 24px 12px 0; font-size: .71rem; color: #61716b; display: flex; align-items: center; gap: 8px; }
 .phase-dot, .connection-dot { height: 6px; width: 6px; display: inline-block; border-radius: 50%; background: #157568; flex-shrink: 0; }
 .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: clip; }
 .workspace-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; display: flex; flex-direction: column; }
+.workspace-content:focus-visible { outline: 3px solid #157568; outline-offset: -3px; }
 .workspace-content > main, .workspace-footer { flex-shrink: 0; }
 .topbar { flex-shrink: 0; padding: 22px 40px; border-bottom: 1px solid #e0e7e3; background: #fff; display: flex; justify-content: space-between; align-items: center; font-size: .75rem; gap: 14px; }
 .breadcrumb-divider { color: #a4afa9; margin: 0 12px; }
@@ -209,6 +210,15 @@ textarea:focus-visible { outline: 3px solid #157568; outline-offset: 2px; }
 .review-check input { width: 18px; height: 18px; flex-shrink: 0; margin-top: 4px; }
 .notes-field input { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid #bccdc4; border-radius: 6px; font: inherit; }
 .management-actions { flex-wrap: wrap; }
+/* Bound long labels and keep controls reachable rather than clipping content. */
+button, input, select, textarea { max-width: 100%; }
+.text-button { white-space: normal; text-align: left; }
+.topbar-actions .text-button { white-space: nowrap; }
+.sort-control, .pagination, .pagination > div { flex-wrap: wrap; }
+.count-card, .settings-panel, .page-header { min-width: 0; overflow-wrap: anywhere; }
+.login-page { padding: 32px 20px; }
+.auth-form { min-width: 0; }
+summary:focus-visible { outline: 3px solid #157568; outline-offset: 4px; }
 @media (max-width: 1179px) {
   .leads-table, .leads-table tbody { display: block; border: 0; background: transparent; }
   .leads-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }

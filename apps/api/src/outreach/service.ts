@@ -8,7 +8,8 @@ import { SupabaseManagementRepository } from '../management.js';
 import { readServerEnv } from '../env.js';
 import { createServerSupabase } from '../supabase.js';
 import { fileUsageStore } from '../discovery/usage.js';
-import { fileURLToPath } from 'node:url';
+import { usageFile, verifiedHunterKey } from '../production.js';
+import { supabaseUsageStore } from '../quota.js';
 import { resolveWebsiteEvidence } from '../website-safety.js';
 import { HunterAdapter, usableEmail, type ContactAdapter } from './hunter.js';
 
@@ -120,7 +121,7 @@ export function createOutreachService(env: NodeJS.ProcessEnv) {
   return new OutreachService((owner,token) => {
     const client = createServerSupabase(settings,token); if (!client) throw new RequestError(503,'Supabase is not configured.');
     return new SupabaseOutreachRepository(client,owner);
-  },new HunterAdapter(env.HUNTER_API_KEY?.trim() || null,fileUsageStore(fileURLToPath(new URL('../../../../.local/hunter-usage.json',import.meta.url))),Number(env.HUNTER_MONTHLY_LIMIT || '10')));
+  },new HunterAdapter(verifiedHunterKey(env),env.NODE_ENV === 'production' || env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(env) : fileUsageStore(usageFile(env, 'hunter')),Number(env.HUNTER_MONTHLY_LIMIT || '10')));
 }
 export function outreachRoutes(service?: OutreachService) {
   const router = Router();

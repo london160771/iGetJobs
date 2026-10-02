@@ -2,8 +2,19 @@ import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { RequestError } from './errors.js';
-type Usage = Record<string, { period: string; count: number; lastCall: number }>;
-export interface UsageStore { load(): Promise<Usage>; save(usage: Usage): Promise<void> }
+export type Usage = Record<string, { period: string; count: number; lastCall: number }>;
+export type QuotaProvider = 'OSM' | 'SERPAPI' | 'HUNTER';
+export interface UsageStore { load(): Promise<Usage>; save(usage: Usage): Promise<void>; reserve?(provider: QuotaProvider, limit: number): Promise<void> }
+export async function reserveUsage(store: UsageStore, source: QuotaProvider, limit: number, now: number) {
+  if (store.reserve) return store.reserve(source,limit);
+  const usage = await store.load(), previous = usage[source];
+  const period = new Date(now).toISOString().slice(0,source === 'OSM' ? 10 : 7);
+  if (previous && now - previous.lastCall < (source === 'OSM' ? 15000 : 5000)) throw new RequestError(429,'Please wait before another provider lookup.');
+  const count = previous?.period === period ? previous.count : 0;
+  if (count >= limit) throw new RequestError(429,'The configured provider attempt cap is exhausted.');
+  usage[source] = { period,count:count + 1,lastCall:now };
+  await store.save(usage); // Local development only; reserve even failed attempts.
+}
 export function fileUsageStore(path: string): UsageStore {
   return {
     async load() {
@@ -40,15 +51,7 @@ export class ProviderGuard {
     this.busy = true;
     const task = (async () => {
       try {
-        const usage = await this.store.load();
-        const period = new Date(this.now()).toISOString().slice(0, source === 'OSM' ? 10 : 7);
-        const previous = usage[source];
-        const count = previous?.period === period ? previous.count : 0;
-        const interval = source === 'OSM' ? 15000 : 5000;
-        if (previous && this.now() - previous.lastCall < interval) throw new RequestError(429, 'Please wait before starting another discovery search.');
-        if (count >= (source === 'OSM' ? 30 : this.serpLimit)) throw new RequestError(429, source === 'OSM' ? 'The daily OpenStreetMap search limit has been reached.' : 'The monthly SerpAPI search limit has been reached.');
-        usage[source] = { period, count: count + 1, lastCall: this.now() };
-        await this.store.save(usage); // Reserve attempts before network I/O; failed attempts remain counted.
+        await reserveUsage(this.store,source,source === 'OSM' ? 30 : this.serpLimit,this.now());
         const value = await collect();
         for (const [cacheKey, entry] of this.cache) if (entry.expires <= this.now()) this.cache.delete(cacheKey);
         const bytes = Buffer.byteLength(JSON.stringify(value));

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: igetjobs-api
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build -w @igetjobs/shared && npm run build -w @igetjobs/api && npm prune --omit=dev
+    startCommand: node apps/api/dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_QUOTA_SERVICE_KEY
+        sync: false
+      - key: HUNTER_FREE_PLAN_VERIFIED
+        value: "false"
+      - key: HUNTER_MONTHLY_LIMIT
+        value: "10"
+      - key: SERPAPI_MONTHLY_LIMIT
+        value: "50"

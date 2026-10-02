@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { usageFile } from '../production.js';
+import { supabaseUsageStore } from '../quota.js';
 import { leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, type DiscoveryPreview, type Lead, type SaveResult, type SaveSelection } from '@igetjobs/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerSupabase } from '../supabase.js';
@@ -119,7 +120,7 @@ export function createDiscoveryService(env: NodeJS.ProcessEnv) {
   const serverEnv = readServerEnv(env);
   const limit = Number(env.SERPAPI_MONTHLY_LIMIT || '50');
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('SERPAPI_MONTHLY_LIMIT must be an integer between 1 and 1000.');
-  const guard = new ProviderGuard(fileUsageStore(fileURLToPath(new URL('../../../../.local/provider-usage.json', import.meta.url))), limit);
+  const guard = new ProviderGuard(env.NODE_ENV === 'production' || env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(env) : fileUsageStore(usageFile(env, 'provider')), limit);
   return new DiscoveryService(env, (ownerId, token) => {
     const client: SupabaseClient | null = createServerSupabase(serverEnv, token);
     if (!client) throw new RequestError(503, 'Supabase is not configured.');

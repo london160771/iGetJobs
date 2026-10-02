@@ -2,9 +2,9 @@
 
 ## Current status
 
-Phases 0–3 are approved and complete, including all reviewed fixes. The user authorized Phase 4 only. Deterministic outreach drafts, explicit review/edit/copy actions, manual Contacted tracking, and guarded Hunter contact fallback are implemented. Evidence changes atomically preserve user text but mark drafts stale and revoke approval. The user applied the fourth migration. **Stop for Phase 4 review. Phase 5 has not started.**
+Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment preparation and final verification. The user selected Vercel Free project `igetjobs`, Render Free service `igetjobs-api` with one Node process, and existing Supabase for durable quota state. **Phase 5 is in progress, not complete or deployed. No V2 work.**
 
-The two Phase 4 review fixes are implemented: failure wording now follows recorded HTTP/DNS/network/timeout evidence, and successful no-op draft saves clear editor dirty state. The separate fix verification/publication is recorded below; Phase 4 remains pending review.
+The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure wording matches recorded evidence and no-op draft saves reset dirty state. The latest user instruction replaces production local quota files with Supabase reservations because Render Free storage is ephemeral. The earlier file-persistence deployment notes are historical; current production requirements are below.
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
@@ -228,17 +228,53 @@ Reviewed base: 17cb0da0bd99100c84152a2e404931611983d049. Authorized scope: the t
 
 ## Limitations and Phase 5 handoff
 
-Phases 0–3 are approved; Phase 4 review is pending. No remaining Supabase prerequisite blocker. Live Hunter and SerpAPI remain unverified because provider credentials are not configured; their free-tier transport safeguards pass fixture tests and enrichment/discovery remain disabled respectively. OSM satisfies the live discovery criterion. Verify a real Free-plan account before enabling/relying on either optional provider. Hunter cannot enrich NO_WEBSITE leads without an audited domain; manual contact entry remains available.
+Phases 0–4 are approved. Auth/lead prerequisites pass. Phase 5 adds a separate quota migration and server-only credential prerequisite; live quota verification is pending that setup. Hunter/SerpAPI remain unverified and disabled. OSM supplies live discovery. Hunter cannot enrich NO_WEBSITE without an audited domain; manual contact entry remains available.
 
-Live Hunter verification is non-blocking while Hunter remains disabled. Before enabling it later, verify a real Free-plan credential first. Deployment must preserve single-API-process quota guards and durable provider/Hunter usage files; do not deploy replicas or ephemeral usage storage under the current guard design.
+Live Hunter verification is non-blocking while disabled. A key alone now cannot enable it: `HUNTER_FREE_PLAN_VERIFIED=true` is also required only after real Free-plan credential verification. Production quota durability is Supabase, not Render files. Keep one API process and preserve explicit review/owner RLS/stale-write guards/atomic assessment and draft invalidation.
 
-This personal architecture uses one API process. Persist .local/provider-usage.json and .local/hunter-usage.json across restarts; do not reset them to bypass caps. Previews/cache/locks are process-local and do not support replicas. A preview expires after 30 minutes or API restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate/management/outreach reads 2,000 owner records, legacy saved read view latest 100, history 100 provenance records/lead. Failures are explicit; uncertain records never silently merge. OSM coverage/bounding boxes require relevance review.
+Production never falls back to files/in-memory quotas. Development may retain ignored usage files when the quota credential is absent. Never reset either store to bypass caps. Previews/cache/locks remain process-local; a preview expires after 30 minutes/restart. Limits: CSV 40KB/200 rows, saves 50/request, duplicate/management/outreach snapshots 2,000 owner records, legacy saved view 100, provenance/history 100/lead. Uncertain duplicates require review; OSM coverage/bounding boxes require relevance review.
 
 Phase 2 uses static HTML, not a rendered browser audit. JavaScript-only pages, external CSS visibility, actual CTA behavior, external broken links and complete mobile/performance behavior remain unverified. Compression, unsupported content and access restrictions may require manual review; no score is invented for incomplete audits. Address rules deliberately reject some public special-purpose exceptions. Only the first approved IP is tried, without automatic retries. Results reflect the measured snapshot and may change with real page/DNS/timing changes. Previously discarded invalid source strings cannot be reconstructed; import corrected evidence when historical source data is incomplete.
 
-Preserve safety in later phases: use provenance before NO_WEBSITE; pin validated IPs, preserve Host/TLS checks, disable automatic redirects, revalidate/repin every hop, keep bounds and rebinding/private-redirect tests. Do not bypass the pinned transport or execute page assets. Keep classifications/scoring deterministic and explicit. Phase 5 requires approval. Clipboard access may be unavailable/denied; reviewed text remains available for manual copying. Outreach is preparation only and never sends automatically.
+Preserve safety: use provenance before NO_WEBSITE; pin validated IPs, retain Host/TLS checks, disable automatic redirects, revalidate/repin every hop, and retain bounds/rebinding/private-redirect tests. Never execute page assets or bypass pinned transport. Audits/scoring remain deterministic and explicit. Clipboard failures permit manual copying of reviewed text. Outreach never sends automatically. Stop for final V1 review after actual Phase 5 deployment verification.
 
 Mandatory invalidation is implemented and verified in Phase 3. Preserve the owner/timestamp guards and database trigger for future edits; reaudit before presenting invalidated values as current. Notes/status/follow-up retain unchanged assessments and identical links remain idempotent. HTML analysis bounds and CSS-unknown behavior must remain intact. Management/counts cap at 2,000 owner records; legacy discovery reads remain latest-100. Activity retains the latest 100 events, not an unlimited history. Follow-up is a calendar date; no reminders or automatic sending are implemented.
+
+## Phase 5 preparation — 2026-10-02
+
+- Added fifth migration `202610020005_provider_usage.sql`: forced-RLS global provider-account usage; no anon/user table access, status/reservation RPC execution limited to service_role; empty search paths, bounded provider/limit values, row locks, database UTC clock, atomic cooldown/cap/reservation. No reset RPC and no lead/settings policy changes. Failed requests/no-result consume allowance before network I/O. Fresh service objects cannot reset counters; cached searches do not reserve again.
+- Private quota client is confined to `apps/api/src/quota.ts` and requires server-only `SUPABASE_QUOTA_SERVICE_KEY`. Lead/settings clients still reject privileged app keys and use public keys + user JWT/RLS. Production startup probes quota RPC and fails closed on missing credentials/schema. Development alone may use files. The migration is tested locally; application/live credential setup is still pending.
+- Kept provider adapters, free-plan account checks, request bounds, conservative dedupe, audit worker/fetch safeguards, scoring, management CAS and database assessment/draft invalidation. Hunter now needs both a key and explicit verified-Free flag; no sending or paid integration is added.
+- Added Render Free blueprint (one Node API, no paid disk) and Vercel Vite/workspace build, external API rewrite, SPA routing and security headers. The API hostname in vercel.json is the expected `igetjobs-api.onrender.com`, not a confirmed live URL. Vercel CLI account access works, but `igetjobs` project is absent. No Render token/account deployment access is configured. Deployment has not occurred.
+- Vercel Hobby's published restriction to personal/non-commercial use is recorded in README. Commercial client acquisition may need a different approved free frontend host; do not silently purchase/upgrade. Confirm eligibility before business production use.
+- UI polish fixes measured navigation-number contrast and keyboard access to the sole workspace scroller, preserves drawer/focus/scroll rules, bounds long controls/text, and improves signup/confirmation feedback with no fabricated confirmation-email claim. Client requests/health checks are bounded for cold starts. API responses have no-store/nosniff/frame/referrer headers; optional local combined-build static hosting rejects API/asset fallback and uses CSP. Bounded graceful shutdown preserves production audit limits.
+- New dev-only axe-core checks all V1 screens at 1280×720, 768×1024, 390×844, 320×740 and 844×320, with no document/main overflow, accessible labels/contrast, forward/reverse drawer focus trapping, navigation closure, safe error/retry and empty states. Completed development and built-preview runs pass all screens; initial scans found the two issues now fixed. Earlier browser runs with an overly short route-load deadline were incomplete; the test deadline now accommodates two bounded Supabase requests without altering production worker/fetch limits.
+- npm run check: PASS three times at 73/73 after correcting a new test's expected unauthenticated status to 401; zero-warning lint, typecheck and production builds. Actual quota SQL tests prove cooldown/cap/concurrent reservation, fresh-guard restart, failed-attempt charging, period rollover and anon/user denial. Existing security/discovery/audit/management/outreach regressions pass. Production dependency audit: zero advisories. The existing approximately 501KB Vite chunk advisory remains non-blocking.
+- Live Supabase auth/RLS: PASS. CSV/dedupe/protocol-relative sanitization/provenance/lost-response retry and live OSM discovery/cache/save: PASS (24 results). Live audit verification: PASS, including real validated pinned HTTPS, deterministic fixture classifications/reasons, invalid-evidence handling, CSS uncertainty, stale writes, source-link invalidation and cross-user denial. Management and outreach live reruns: PASS for coherent concurrent counts, notes/status/follow-ups, idempotent history, stale-write rejection, atomic assessment/draft invalidation, owner isolation and accurate failure wording. Built outreach browser: PASS for editing/no-op approval/copy/Contacted, stale refusal and all five responsive sizes.
+- Secret scan: PASS over 108 publishable files, Git history and 12 rebuilt frontend outputs. No local values printed. Temporary logs/screenshots/journals/builds/env and Vercel metadata are ignored. New tracked scan includes quota/private credentials. No temporary debug or sending integration exists; existing runtime dependencies are retained and axe-core is development-only.
+- New verification commands: verify:quota (one real counted reservation, no provider call/reset), verify:phase5:browser (all-screen WCAG/responsive), verify:deployed (actual frontend-proxied workflow with real public audit fixture pages), secret:scan. The deployed verifier is prepared but has not run against a deployed origin. Public fixture classifications must be measured, not assumed; a changed/unavailable page fails that check honestly.
+- Built-preview smoke rehearsal: PASS against actual local API and real Supabase, including three measured classifications (missing evidence, public HTTP 404 with unknown page quality, reachable public HTTPS), score math/reasons, CSV/save/dedupe, filters/counts/notes/status/follow-up, approved edited drafts, copy validation, Contacted/no-op history, stale writes, logout/login persistence, cross-user denial and live OSM/cache. Initial verifier assertions wrongly required a timed-out public page to be reachable and compared equivalent UTC date strings byte-for-byte; those assertions were corrected without changing application behavior. This is not a production deployment claim.
+- README contains exact Supabase migration/key, Render Free, Vercel public-only env/proxy, Auth URL and post-deployment smoke instructions. Manual setup, live quota checks, delivered signup confirmation and deployed workflow are blockers for Phase 5 completion. Phases 0–4 locally/live satisfy SPEC.md's eleven workflow criteria; final deployment confirmation remains pending. Never label Phase 5/V1 deployment complete until actual smoke tests pass.
+- Changed file groups: quota migration/API persistence, production/security/static-hosting utilities, Hunter gate, React auth/accessibility/responsive/request polish, deployment configurations, tests/verifiers/dev accessibility dependency, README and this state. SPEC.md, DESIGN.md, PLAN.md and user-owned RLS/invalidation migrations remain unchanged.
+
+### SPEC.md V1 success criteria
+
+All eleven criteria pass locally against live Supabase; deployed confirmation is pending for each.
+
+| Criterion | Evidence |
+| --- | --- |
+| 1. Log in | Both disposable accounts, protected routes and browser login |
+| 2. Search a supported source | Live OSM and repeated-query cache |
+| 3. Collect local businesses | OSM normalization/preview/save/reload |
+| 4. Deduplicate | Domain/phone/name-address regressions, CSV retry/link and smoke |
+| 5. Audit website presence/quality | Deterministic fixtures and actual pinned HTTPS/HTTP-error smoke |
+| 6. Classify | All three persisted classifications, malformed evidence safeguards |
+| 7. Score with visible reasons | Scoring math/regressions, persisted reasons and detail UI |
+| 8. Filter and inspect | Management live verifier and all-screen browser checks |
+| 9. Create/edit outreach | Live draft/approval/persistence and clipboard browser checks |
+| 10. Manually update status | Seven stages, guarded Contacted and idempotent history |
+| 11. Persist in Supabase | Live owner RLS/isolation, logout/login and atomic invalidation |
+
 
 ## Publication and mandatory workflow
 
@@ -263,6 +299,8 @@ Separate Phase 3 review-fix commit message: fix: stabilize Phase 3 snapshots, wo
 Phase 4 commit message: feat: implement reviewed outreach drafts and guarded contact enrichment. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 5.
 
 Separate Phase 4 review-fix commit message: fix: align outreach failure wording and reset saved editor state. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 5.
+
+Phase 5 preparation commit message: feat: prepare V1 deployment with durable Supabase quotas. Target: origin/main. This publishes completed preparation and local/live regression checks, not Phase 5 completion. Schema/private quota credential, host setup/eligibility, actual deployment and production smoke remain pending. Confirmed SHA/push status are recorded in Git and the handoff.
 
 ## Last updated
 
