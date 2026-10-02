@@ -3,12 +3,12 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { RequestError } from './errors.js';
 export type Usage = Record<string, { period: string; count: number; lastCall: number }>;
-export type QuotaProvider = 'OSM' | 'SERPAPI' | 'HUNTER';
+export type QuotaProvider = 'OSM' | 'SERPAPI' | 'HUNTER' | 'GEOAPIFY';
 export interface UsageStore { load(): Promise<Usage>; save(usage: Usage): Promise<void>; reserve?(provider: QuotaProvider, limit: number): Promise<void> }
 export async function reserveUsage(store: UsageStore, source: QuotaProvider, limit: number, now: number) {
   if (store.reserve) return store.reserve(source,limit);
   const usage = await store.load(), previous = usage[source];
-  const period = new Date(now).toISOString().slice(0,source === 'OSM' ? 10 : 7);
+  const period = new Date(now).toISOString().slice(0,['OSM','GEOAPIFY'].includes(source) ? 10 : 7);
   if (previous && now - previous.lastCall < (source === 'OSM' ? 15000 : 5000)) throw new RequestError(429,'Please wait before another provider lookup.');
   const count = previous?.period === period ? previous.count : 0;
   if (count >= limit) throw new RequestError(429,'The configured provider attempt cap is exhausted.');
@@ -41,12 +41,18 @@ export class ProviderGuard {
   private busy = false;
   private cache = new Map<string, { value: unknown; expires: number; bytes: number }>();
   private pending = new Map<string, Promise<{ value: unknown; cached: boolean }>>();
-  constructor(private store: UsageStore, private serpLimit = 50, private now = () => Date.now()) {}
+  constructor(private store: UsageStore, private serpLimit = 50, private now = () => Date.now(), private geoapifyLimit = 100) {
+    if (!Number.isInteger(geoapifyLimit) || geoapifyLimit < 1 || geoapifyLimit > 1000) throw new Error('GEOAPIFY_DAILY_LIMIT must be an integer between 1 and 1000.');
+  }
+  async reserveGeoapifyRequest() {
+    if (!this.busy) throw new RequestError(503, 'Geoapify usage protection is unavailable.');
+    await reserveUsage(this.store, 'GEOAPIFY', this.geoapifyLimit, this.now());
+  }
   async reserveOsmRetry() {
     if (!this.busy) throw new RequestError(503, 'OSM retry protection is unavailable.');
     await reserveUsage(this.store, 'OSM', 30, this.now());
   }
-  async run<T>(source: 'OSM' | 'SERPAPI', key: string, collect: () => Promise<T>): Promise<{ value: T; cached: boolean }> {
+  async run<T>(source: 'OSM' | 'SERPAPI' | 'GEOAPIFY', key: string, collect: () => Promise<T>): Promise<{ value: T; cached: boolean }> {
     const cached = this.cache.get(key);
     if (cached && cached.expires > this.now()) return { value: structuredClone(cached.value) as T, cached: true };
     const pending = this.pending.get(key);
@@ -55,7 +61,7 @@ export class ProviderGuard {
     this.busy = true;
     const task = (async () => {
       try {
-        await reserveUsage(this.store,source,source === 'OSM' ? 30 : this.serpLimit,this.now());
+        await reserveUsage(this.store,source,source === 'OSM' ? 30 : source === 'GEOAPIFY' ? this.geoapifyLimit : this.serpLimit,this.now());
         const value = await collect();
         for (const [cacheKey, entry] of this.cache) if (entry.expires <= this.now()) this.cache.delete(cacheKey);
         const bytes = Buffer.byteLength(JSON.stringify(value));

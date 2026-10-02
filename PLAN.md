@@ -43,7 +43,7 @@ Goal: collect leads from supported sources.
 Tasks:
 - create source-adapter interface
 - implement SerpAPI adapter
-- implement OSM/Overpass adapter
+- implement OSM/Overpass adapter (completed historically; replaced by Geoapify Free in approved Phase 5 deployment correction)
 - implement CSV import
 - normalize all records
 - add deduplication

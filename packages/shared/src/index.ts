@@ -3,7 +3,7 @@ export * from './management.js';
 export * from './validation.js';
 export * from './outreach.js';
 import type { LeadActivity } from './management.js';
-export type LeadSource = 'SERPAPI' | 'OSM' | 'CSV';
+export type LeadSource = 'SERPAPI' | 'GEOAPIFY' | 'OSM' | 'CSV';
 export type LeadClassification = 'NO_WEBSITE' | 'POOR_WEBSITE' | 'ACCEPTABLE_WEBSITE';
 export type LeadStatus = 'New' | 'Qualified' | 'Contacted' | 'Replied' | 'Call Booked' | 'Closed' | 'Lost';
 export type LeadPriority = 'High' | 'Medium' | 'Low';
@@ -135,7 +135,7 @@ export interface DiscoveryQuery { country: string; city: string; niche: string }
 export interface DiscoveryConfig {
   markets: { code: string; label: string }[];
   niches: { id: string; label: string }[];
-  sources: { id: 'OSM' | 'SERPAPI'; label: string; available: boolean }[];
+  sources: { id: 'GEOAPIFY' | 'SERPAPI'; label: string; available: boolean }[];
   csvMaxBytes: number;
   maxResults: number;
 }

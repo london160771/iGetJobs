@@ -43,7 +43,7 @@ The app helps collect leads, audit them, score them, draft outreach, and track s
 ## Data sources
 V1 may use:
 - SerpAPI free tier.
-- OpenStreetMap / Overpass.
+- Geoapify Free (approved Phase 5 replacement for active OpenStreetMap / Overpass). Historical OSM data/adapters remain supported.
 - Manual CSV import.
 - Hunter only as a fallback when a lead has no email and only within free-tier limits.
 
@@ -109,7 +109,7 @@ Preserve:
 - Never commit secrets.
 - Never expose secrets in frontend code.
 - Never log API keys.
-- Throttle/cache Overpass requests.
+- Throttle/cache discovery requests; persist provider allowances atomically in Supabase.
 - Guard Hunter usage carefully.
 
 ## Agent behavior

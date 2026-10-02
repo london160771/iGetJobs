@@ -136,11 +136,11 @@ try {
   const separate = await request('/api/discovery/save', a, { previewId: branchPreview.data.id, selections: [{ id: branch.lead.id, action: 'separate' }] });
   check(separate.data.results[0].status === 'saved', 'Reviewed uncertain duplicate can be kept as a separate lead');
   if (process.argv.includes('--live-source')) {
-    checkpoint = 'Live OpenStreetMap / Overpass discovery';
-    const query = { source: 'OSM', country: 'GB', city: 'Bath, Somerset', niche: 'dentists' };
+    checkpoint = 'Live Geoapify discovery';
+    const query = { source: 'GEOAPIFY', country: 'GB', city: 'Bath, Somerset', niche: 'dentists' };
     const discovery = await request('/api/discovery/search', a, query);
     check(discovery.status === 200 && discovery.data.rows.length > 0, checkpoint);
-    check(discovery.data.rows.every(item => item.lead.source === 'OSM' && item.lead.sourceId && item.lead.provenance[0].metadata.tags), 'Live source identifiers and raw metadata are preserved');
+    check(discovery.data.rows.every(item => item.lead.source === 'GEOAPIFY' && item.lead.sourceId && item.lead.provenance[0].metadata.properties), 'Live source identifiers and raw metadata are preserved');
     const cached = await request('/api/discovery/search', a, query);
     check(cached.status === 200 && cached.data.cached === true, 'Identical live search uses the free-tier cache');
     const candidate = discovery.data.rows.find(item => item.duplicate.kind === 'new');
@@ -148,7 +148,7 @@ try {
     created.push({ client: a.client, id: candidate.lead.id });
     const liveSave = await request('/api/discovery/save', a, { previewId: discovery.data.id, selections: [{ id: candidate.lead.id, action: 'save' }] });
     const liveRead = await a.client.from('leads').select('source, source_id, provenance').eq('id', candidate.lead.id).single();
-    check(liveSave.data.results[0].status === 'saved' && !liveRead.error && liveRead.data.source === 'OSM' && liveRead.data.source_id === candidate.lead.sourceId, 'A live discovered lead persists remotely');
+    check(liveSave.data.results[0].status === 'saved' && !liveRead.error && liveRead.data.source === 'GEOAPIFY' && liveRead.data.source_id === candidate.lead.sourceId, 'A live discovered lead persists remotely');
     console.log('Live source preview count: ' + discovery.data.rows.length);
   }
 } catch {

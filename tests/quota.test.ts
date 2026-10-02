@@ -12,6 +12,10 @@ test('actual quota migration enforces atomic caps/cooldowns, survives fresh guar
   try {
     await db.exec('create role anon noinherit; create role authenticated noinherit; create role service_role noinherit;');
     await db.exec(await readFile('supabase/migrations/202610020005_provider_usage.sql','utf8'));
+    // The source constraint is also exercised; other suites cover the lead RLS schema.
+    await db.exec("create table public.leads (source text constraint leads_source_check check (source in ('OSM','SERPAPI','CSV')))");
+    await db.exec(await readFile('supabase/migrations/202610020006_geoapify.sql','utf8'));
+    await db.exec("insert into public.leads values ('GEOAPIFY')");
     const rpc: QuotaRpc = { async rpc(name,input) {
       try {
         const query = name === 'reserve_provider_usage' ? 'select public.reserve_provider_usage($1,$2) as data' : 'select public.provider_usage_status() as data';
@@ -40,6 +44,15 @@ test('actual quota migration enforces atomic caps/cooldowns, survives fresh guar
     const concurrent = await Promise.allSettled([quotaStore(rpc).reserve!('OSM',30),quotaStore(rpc).reserve!('OSM',30)]);
     assert.equal(concurrent.filter(result => result.status === 'fulfilled').length,1);
     assert.equal((await initial.load()).OSM!.count,1);
+    await initial.reserve!('GEOAPIFY',2);
+    assert.equal((await quotaStore(rpc).load()).GEOAPIFY!.count,1);
+    await assert.rejects(quotaStore(rpc).reserve!('GEOAPIFY',2),error => error instanceof RequestError && error.status === 429);
+    await db.exec("reset role; update public.provider_usage set last_call=clock_timestamp()-interval '6 seconds' where provider='GEOAPIFY'; set role service_role");
+    const geoConcurrent = await Promise.allSettled([quotaStore(rpc).reserve!('GEOAPIFY',2),quotaStore(rpc).reserve!('GEOAPIFY',2)]);
+    assert.equal(geoConcurrent.filter(result => result.status === 'fulfilled').length,1);
+    assert.equal((await initial.load()).GEOAPIFY!.count,2);
+    await db.exec("reset role; update public.provider_usage set period='2000-01-01',last_call=clock_timestamp()-interval '6 seconds' where provider='GEOAPIFY'; set role service_role");
+    await initial.reserve!('GEOAPIFY',2); assert.equal((await initial.load()).GEOAPIFY!.count,1);
     await db.exec("reset role; update public.provider_usage set period='2000-01',count=999,last_call=clock_timestamp()-interval '6 seconds' where provider='SERPAPI'; set role service_role");
     await initial.reserve!('SERPAPI',2); assert.equal((await initial.load()).SERPAPI!.count,1);
     for (const role of ['anon','authenticated']) {

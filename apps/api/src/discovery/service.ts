@@ -11,7 +11,7 @@ import { duplicateCheck, type LeadIdentity } from './dedupe.js';
 import { SupabaseLeadRepository, type LeadRepository } from './repository.js';
 import { ProviderGuard, fileUsageStore } from './usage.js';
 import { CsvAdapter } from './adapters/csv.js';
-import { OsmAdapter, osmEndpoints } from './adapters/osm.js';
+import { GeoapifyAdapter } from './adapters/geoapify.js';
 import { SerpApiAdapter } from './adapters/serpapi.js';
 import type { Collection, SourceAdapter } from './adapters/types.js';
 import { RequestError } from './errors.js';
@@ -21,18 +21,18 @@ export class DiscoveryService {
   readonly options;
   private previews = new Map<string, StoredPreview>();
   private saving = new Set<string>();
-  private adapters: Record<'OSM' | 'SERPAPI', SourceAdapter>;
-  constructor(env: NodeJS.ProcessEnv, private repository: (ownerId: string, token: string) => LeadRepository, private guard: ProviderGuard, adapters?: Record<'OSM' | 'SERPAPI', SourceAdapter>) {
+  private adapters: Record<'GEOAPIFY' | 'SERPAPI', SourceAdapter>;
+  constructor(env: NodeJS.ProcessEnv, private repository: (ownerId: string, token: string) => LeadRepository, private guard: ProviderGuard, adapters?: Record<'GEOAPIFY' | 'SERPAPI', SourceAdapter>) {
     this.options = discoveryOptions(env);
     this.adapters = adapters || {
-      OSM: new OsmAdapter(this.options.niches, fetch, osmEndpoints(env), { reserveRetry: () => guard.reserveOsmRetry() }),
+      GEOAPIFY: new GeoapifyAdapter(env.GEOAPIFY_API_KEY?.trim() || null, this.options.niches, fetch, { reserveNext: () => guard.reserveGeoapifyRequest() }),
       SERPAPI: new SerpApiAdapter(env.SERPAPI_API_KEY?.trim() || null, this.options.niches)
     };
   }
   async search(ownerId: string, token: string, input: Record<string, unknown>) {
-    if (input.source !== 'OSM' && input.source !== 'SERPAPI') throw new RequestError(400, 'Choose a supported discovery source.');
+    if (input.source !== 'GEOAPIFY' && input.source !== 'SERPAPI') throw new RequestError(400, 'Choose a supported discovery source.');
     const source = input.source;
-    if (!this.options.config.sources.find(item => item.id === source)?.available) throw new RequestError(503, 'This discovery source is not configured. Choose OpenStreetMap or CSV import.');
+    if (!this.options.config.sources.find(item => item.id === source)?.available) throw new RequestError(503, 'This discovery source is not configured. Configure its server credential or choose CSV import.');
     const query = validateQuery(input, this.options.config);
     const key = JSON.stringify([source, query.country, query.city.toLowerCase(), query.niche]);
     const result = await this.guard.run(source, key, () => this.adapters[source].collect(query));
@@ -120,7 +120,7 @@ export function createDiscoveryService(env: NodeJS.ProcessEnv) {
   const serverEnv = readServerEnv(env);
   const limit = Number(env.SERPAPI_MONTHLY_LIMIT || '50');
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('SERPAPI_MONTHLY_LIMIT must be an integer between 1 and 1000.');
-  const guard = new ProviderGuard(env.NODE_ENV === 'production' || env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(env) : fileUsageStore(usageFile(env, 'provider')), limit);
+  const guard = new ProviderGuard(env.NODE_ENV === 'production' || env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(env) : fileUsageStore(usageFile(env, 'provider')), limit, Date.now, Number(env.GEOAPIFY_DAILY_LIMIT || '100'));
   return new DiscoveryService(env, (ownerId, token) => {
     const client: SupabaseClient | null = createServerSupabase(serverEnv, token);
     if (!client) throw new RequestError(503, 'Supabase is not configured.');

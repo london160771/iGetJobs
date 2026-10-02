@@ -8,7 +8,7 @@ import { EmptyState, PageHeader } from './components';
 
 export function Search() {
   const [config, setConfig] = useState<DiscoveryConfig | null>(null);
-  const [source, setSource] = useState('OSM');
+  const [source, setSource] = useState('GEOAPIFY');
   const [country, setCountry] = useState('');
   const [niche, setNiche] = useState('');
   const [city, setCity] = useState('');
@@ -86,7 +86,7 @@ export function Search() {
             {warnings.map((warning, index) => <p className="row-warning" key={index}>{warning}</p>)}{result?.status === 'failed' && <p className="form-error" role="alert">{result.error}</p>}
           </div><div className="lead-result-action"><label>Save choice<span className="sr-only"> for {lead.businessName}</span><select aria-label={`Save choice for ${lead.businessName}`} value={done ? 'skip' : choices[lead.id] || 'skip'} disabled={busy || done} onChange={event => setChoices(current => ({ ...current, [lead.id]: event.target.value as SaveAction | 'skip' }))}><option value="skip">{done ? 'Completed' : 'Skip'}</option>{duplicate.kind === 'new' && <option value="save">Save new lead</option>}{duplicate.canLink && <option value="link">Add source to saved lead</option>}{duplicate.kind !== 'new' && <option value="separate">Reviewed · save separately</option>}</select></label></div>
         </article>;
-      })}</div><p className="source-attribution">{preview.attribution}{preview.attribution.includes('OpenStreetMap') && <> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">License and attribution ↗</a></>}</p>
+      })}</div><p className="source-attribution">{preview.attribution}{preview.attribution.includes('Geoapify') && <> <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Powered by Geoapify ↗</a></>}{preview.attribution.includes('OpenStreetMap') && <> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">License and attribution ↗</a></>}</p>
     </section>}
   </>;
 }

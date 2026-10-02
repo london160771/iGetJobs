@@ -27,8 +27,8 @@
     "verify:quota": "node scripts/verify-quota.mjs",
     "verify:phase5:browser": "node scripts/verify-phase5-browser.mjs",
     "verify:deployed": "node scripts/verify-deployed.mjs",
-    "verify:osm:production": "node scripts/verify-production-osm.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "verify:geoapify:production": "node scripts/verify-production-geoapify.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

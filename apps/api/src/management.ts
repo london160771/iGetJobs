@@ -24,7 +24,7 @@ export function parseLeadFilters(input: Record<string, unknown>): LeadFilters {
     if (!validLeadLabel(input[key])) throw new RequestError(400, `City and niche must not exceed ${leadLabelMaxLength} characters.`);
     if (input[key]) query[key] = normalizedLeadLabel(input[key]) || '';
   }
-  for (const [key, values] of Object.entries({ classification: [...classifications, 'UNAUDITED'], priority: ['High', 'Medium', 'Low'], status: leadStatuses, source: ['OSM', 'SERPAPI', 'CSV'], hasEmail: ['yes', 'no'], hasPhone: ['yes', 'no'] })) {
+  for (const [key, values] of Object.entries({ classification: [...classifications, 'UNAUDITED'], priority: ['High', 'Medium', 'Low'], status: leadStatuses, source: ['GEOAPIFY', 'OSM', 'SERPAPI', 'CSV'], hasEmail: ['yes', 'no'], hasPhone: ['yes', 'no'] })) {
     if (input[key] && !values.includes(input[key] as never)) throw new RequestError(400, 'Invalid lead filters.');
   }
   for (const key of ['minScore', 'maxScore'] as const) if (input[key] !== undefined && input[key] !== '') {

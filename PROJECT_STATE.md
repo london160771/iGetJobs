@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Production smoke: NEEDS FIXES — OSM public-upstream discovery fails from Render. Phase 5 is not complete. No V2 work.**
+Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Phase 5 Geoapify replacement implemented; production deployment verification pending. Phase 5 is not complete until that gate passes. No V2 work.**
 
 The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure wording matches recorded evidence and no-op draft saves reset dirty state. The latest user instruction replaces production local quota files with Supabase reservations because Render Free storage is ephemeral. The earlier file-persistence deployment notes are historical; current production requirements are below.
 
@@ -10,13 +10,13 @@ Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
 ## Source of truth and locked scope
 
-SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. SPEC.md remains unchanged; DESIGN.md now records the user-authorized permanent responsive navigation rule.
+SPEC.md → DESIGN.md → AGENTS.md → PLAN.md → PROJECT_STATE.md → code. SPEC.md now records the user-approved Phase 5 Geoapify replacement; DESIGN.md records the permanent responsive navigation rule.
 
 - React + TypeScript, Node.js API, Supabase auth/database, free tiers only.
-- Isolated SerpAPI, OpenStreetMap/Overpass, and manual CSV sources.
+- Isolated Geoapify Free, SerpAPI Free, and manual CSV sources. Historical OSM adapters/leads remain supported but OSM is inactive in discovery.
 - Configurable US/GB/CA/AU markets and all nine starter niches.
 - No Next.js, MongoDB, AI, paid requirement, automatic outreach/calling, CRM, or V2 features. Hunter is an explicit, guarded free-tier fallback only.
-- New discovery leads still have null audit/classification/score/draft and status New. Draft generation requires a current completed opportunity assessment and human action. Discovery adapters and the audit/fetching/scoring engine are preserved.
+- New discovery leads still have null audit/classification/score/draft and status New. Draft generation requires a current completed opportunity assessment and human action. The discovery interface, normalization, deduplication and audit/fetching/scoring engine are preserved; the active OSM adapter is replaced with Geoapify by explicit user instruction.
 
 ## Approved Phase 0 history
 
@@ -352,3 +352,15 @@ Phase 5 preparation commit message: feat: prepare V1 deployment with durable Sup
 ## Last updated
 
 2026-10-02
+
+## Phase 5 — Geoapify replacement (2026-10-02)
+
+User-authorized replacement of the unreliable active Nominatim/Overpass path. No V2 work.
+
+- Server-only Geoapify geocoding + Places adapter; fixed HTTPS provider origin, country-scoped city boundaries, explicit nine-niche mapping and safe ambiguous-city errors. Search provider/lead filter labels include GEOAPIFY; historical OSM leads remain readable. No active OSM requests.
+- Existing SourceAdapter/normalized Lead/save/dedupe interfaces remain intact apart from the required GEOAPIFY source enum. Available contacts and address map through existing sanitization; missing fields stay null. Sanitized provider properties, place ID, coordinates and flat website candidates remain in provenance for conflict-aware auditing. Spa/hotel/trade coverage limitations are visible.
+- Five pages of 20 results maximum; ten-second requests / shared 110-second deadline / 8MB response limit. At most one retry per request for 429, transient 5xx or connection/timeouts, bounded backoff and Retry-After; permanent 4xx, malformed results and TLS failures do not retry. Redirects disabled. One-hour result and seven-day city caching.
+- GEOAPIFY_DAILY_LIMIT defaults to 100, maximum 1000, five-second minimum spacing. Geocoding, each page and every retry reserve before I/O. Migration 006 extends the existing row-locked daily Supabase quota function without resetting usage or changing owner RLS. Public/authenticated access to quota state remains denied; production has no file fallback. Migration 006 was locally executed and the owner confirmed it applied remotely. Render key configuration confirmation/deployed verification are pending.
+- Updated env example, Render configuration, README/deployment instructions, source-of-truth provider amendment, live verification scripts and secret scans (including Geoapify key). Legacy OSM adapter/tests/verifier retained for reference only; no active verification command.
+- Local checks: all 87 tests pass, typecheck and production build pass; existing audit/SSRF/rebinding/stale-write/invalidation/discovery/outreach/RLS regressions pass. Geoapify regressions cover mapping, normalization, absent contacts, secret sanitization, cross-provider deduplication, pagination, caches, restart/day reset/cap enforcement, 429/backoff, permanent errors, timeouts, malformed places and website conflicts. Production build retains the known ~501KB vendor-chunk warning. Lint (zero warnings), secret scan (117 publishable files, Git history, 12 built frontend assets) and live Supabase auth/persistence/bidirectional isolation/anonymous/forged-ownership checks pass. No secret values emitted.
+- Deployment/prod gate: pending real frontend search/preview/save/reload/audit/classification/score/deduplication/cache/quota/cleanup and affected deployed regressions. Do not mark Phase 5 complete based on local tests.

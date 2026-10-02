@@ -40,8 +40,8 @@ The niche list must be configurable.
 ### 5.1 SerpAPI
 Use SerpAPI free tier as one discovery source.
 
-### 5.2 OpenStreetMap / Overpass
-Use OSM/Overpass as another discovery source.
+### 5.2 Geoapify (approved Phase 5 replacement)
+Use server-side Geoapify geocoding + Places discovery on its Free plan. The user approved replacing active OSM/Nominatim/Overpass discovery because its public infrastructure was unreliable from Render. Keep the normalized lead contract, provenance, deduplication and downstream workflow unchanged. Historical OSM leads/adapters remain supported; OSM is not an active discovery option. Guard all Geoapify HTTP requests with a configurable daily allowance, bounded pagination, caching, timeouts and retries.
 
 Requirements:
 - throttle requests

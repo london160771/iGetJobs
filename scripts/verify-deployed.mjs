@@ -98,17 +98,17 @@ try {
   check(invalidated.status===200 && stale.audit===null && stale.classification===null && stale.score===null && stale.scoreReasons.length===0 && stale.outreachDraft.stale && stale.outreachDraft.approval!=='approved' && stale.outreachDraft.body===reloaded.outreachDraft.body,'Evidence edit atomically clears assessment and stales preserved user draft');
   check((await request('/api/outreach/'+missing.id+'/copy',a,{ expectedUpdatedAt:stale.updatedAt })).status===409,'Invalidated draft cannot be copied as current');
   if (process.argv.includes('--live-source')) {
-    const query = { source:'OSM',country:'GB',city:'Bath',niche:'dentists' };
+    const query = { source:'GEOAPIFY',country:'GB',city:'Bath',niche:'dentists' };
     const before=usage ? await usage.load() : null;
-    const source = await request('/api/discovery/search',a,query); check(source.status === 200 && source.data.rows.length > 0,'Frontend-proxied live OSM discovery');
+    const source = await request('/api/discovery/search',a,query); check(source.status === 200 && source.data.rows.length > 0,'Frontend-proxied live GEOAPIFY discovery');
     const afterSearch=usage ? await supabaseUsageStore(process.env).load() : null;
-    const cached = await request('/api/discovery/search',a,query); check(cached.status === 200 && cached.data.cached,'Frontend-proxied OSM repeated query uses cache');
+    const cached = await request('/api/discovery/search',a,query); check(cached.status === 200 && cached.data.cached,'Frontend-proxied GEOAPIFY repeated query uses cache');
     if (usage) {
-      const delta=afterSearch.OSM.count-(before.OSM?.period===afterSearch.OSM.period ? before.OSM.count : 0);
-      check(source.data.cached ? delta===0 : delta>=1 && delta<=3,'Deployed OSM initial/retry reservations are bounded and durable');
-      const after=await supabaseUsageStore(process.env).load(); check(after.OSM.count===afterSearch.OSM.count,'Cached OSM query consumes no extra allowance');
+      const delta=afterSearch.GEOAPIFY.count-(before.GEOAPIFY?.period===afterSearch.GEOAPIFY.period ? before.GEOAPIFY.count : 0);
+      check(source.data.cached ? delta===0 : delta>=1 && delta<=12,'Deployed GEOAPIFY initial/retry reservations are bounded and durable');
+      const after=await supabaseUsageStore(process.env).load(); check(after.GEOAPIFY.count===afterSearch.GEOAPIFY.count,'Cached GEOAPIFY query consumes no extra allowance');
     }
-    await collectSource(source.data,'OSM');
+    await collectSource(source.data,'GEOAPIFY');
   }
   if (process.argv.includes('--live-serpapi')) {
     check(configResult.data.sources.some(source => source.id==='SERPAPI' && source.available),'Live SerpAPI is configured');

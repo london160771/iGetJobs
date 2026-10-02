@@ -5,7 +5,7 @@ let checkpoint = 'local configuration';
 try {
   const local = { ...process.env };
   for (const path of ['.env','apps/api/.env','apps/web/.env']) if (existsSync(path)) Object.assign(local,parse(readFileSync(path)));
-  const pairs = Object.entries(local).filter(([key,value]) => /SUPABASE|(?:SERPAPI|HUNTER|RENDER|VERCEL)_(?:API_KEY|TOKEN)|DATABASE_URL/.test(key) && value?.length >= 5);
+  const pairs = Object.entries(local).filter(([key,value]) => /SUPABASE|(?:SERPAPI|GEOAPIFY|HUNTER|RENDER|VERCEL)_(?:API_KEY|TOKEN)|DATABASE_URL/.test(key) && value?.length >= 5);
   const privateValues = pairs.filter(([key]) => !/^(?:VITE_)?SUPABASE_(?:URL|ANON_KEY|PUBLISHABLE_KEY)$/.test(key)).map(([,value]) => value);
   const allValues = pairs.map(([,value]) => value);
   checkpoint = 'publishable files';

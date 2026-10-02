@@ -26,3 +26,7 @@ services:
         value: "10"
       - key: SERPAPI_MONTHLY_LIMIT
         value: "50"
+      - key: GEOAPIFY_API_KEY
+        sync: false
+      - key: GEOAPIFY_DAILY_LIMIT
+        value: "100"

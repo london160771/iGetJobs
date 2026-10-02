@@ -3,7 +3,7 @@ import { RequestError } from './errors.js';
 
 export const CSV_MAX_BYTES = 40 * 1024;
 export const MAX_RESULTS = 100;
-export interface Niche { id: string; label: string; tags: [string, string][] }
+export interface Niche { id: string; label: string; tags: [string, string][]; geoapifyCategories?: string[] }
 export const starterNiches: Niche[] = [
   { id: 'dentists', label: 'Dentists', tags: [['amenity', 'dentist']] },
   { id: 'med-spas', label: 'Med spas', tags: [['healthcare', 'cosmetic_surgery'], ['leisure', 'spa']] },
@@ -26,6 +26,7 @@ export function discoveryOptions(env: NodeJS.ProcessEnv) {
       niches = input.map((item: Niche) => {
         if (!item || !/^[a-z0-9-]{1,40}$/.test(item.id) || typeof item.label !== 'string' || !item.label.trim() || !validLeadLabel(item.label)
           || !Array.isArray(item.tags) || !item.tags.length || item.tags.length > 10 || item.tags.some(tag => !Array.isArray(tag) || tag.length !== 2 || tag.some(value => typeof value !== 'string' || !/^[a-z0-9_:.-]{1,60}$/.test(value)))) throw new Error();
+        if (item.geoapifyCategories !== undefined && (!Array.isArray(item.geoapifyCategories) || !item.geoapifyCategories.length || item.geoapifyCategories.length > 10 || item.geoapifyCategories.some(value => typeof value !== 'string' || !/^[a-z_]+(?:\.[a-z_]+){1,4}$/.test(value)))) throw new Error();
         return { ...item, label: normalizedLeadLabel(item.label)! };
       });
       if (new Set(niches.map(niche => niche.id)).size !== niches.length) throw new Error();
@@ -35,7 +36,7 @@ export function discoveryOptions(env: NodeJS.ProcessEnv) {
   const config: DiscoveryConfig = {
     markets: markets.map(code => ({ code, label: displayNames.of(code) || code })),
     niches: niches.map(({ id, label }) => ({ id, label })),
-    sources: [{ id: 'OSM', label: 'OpenStreetMap', available: true }, { id: 'SERPAPI', label: 'SerpAPI', available: Boolean(env.SERPAPI_API_KEY?.trim()) }],
+    sources: [{ id: 'GEOAPIFY', label: 'Geoapify', available: Boolean(env.GEOAPIFY_API_KEY?.trim()) }, { id: 'SERPAPI', label: 'SerpAPI', available: Boolean(env.SERPAPI_API_KEY?.trim()) }],
     csvMaxBytes: CSV_MAX_BYTES, maxResults: MAX_RESULTS
   };
   return { config, niches };
