@@ -202,6 +202,13 @@ textarea:focus-visible { outline: 3px solid #157568; outline-offset: 2px; }
 .activity-list time { color: #61716b; font-size: .72rem; }
 .provenance-data { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .72rem; margin-bottom: 0; }
 .reload-lead { margin-bottom: 18px; }
+.outreach-tabs { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 24px; }
+.outreach-list { margin-top: 20px; }
+.outreach-generation, .contact-enrichment { display: grid; justify-items: start; gap: 12px; padding-top: 18px; border-top: 1px solid #dfe7e2; }
+.review-check { display: flex; align-items: start; gap: 10px; font-size: .8rem; }
+.review-check input { width: 18px; height: 18px; flex-shrink: 0; margin-top: 4px; }
+.notes-field input { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid #bccdc4; border-radius: 6px; font: inherit; }
+.management-actions { flex-wrap: wrap; }
 @media (max-width: 1179px) {
   .leads-table, .leads-table tbody { display: block; border: 0; background: transparent; }
   .leads-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }

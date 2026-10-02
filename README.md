@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Phases 1–3 implemented:** authenticated discovery, conservative duplicate review, Supabase persistence, safe website auditing, deterministic classification/scoring, and lead management. New leads remain unclassified and unscored until an audit completes. Stop for Phase 3 review before Phase 4 outreach drafts.
+**Phases 1–4 implemented:** authenticated discovery, conservative duplicate review, Supabase persistence, safe website auditing, deterministic classification/scoring, lead management, reviewed outreach drafts and explicit contact fallback. New leads remain unclassified and unscored until an audit completes. Stop for Phase 4 review before Phase 5.
 
 ## Local setup
 
@@ -40,6 +40,8 @@ Then apply `supabase/migrations/202610010002_lead_management.sql` once. It adds 
 
 Also apply `supabase/migrations/202610010003_management_snapshot.sql` once before using the updated management API. Its read-only, stable, security-invoker function returns one bounded owner snapshot under existing RLS; anonymous execution is denied. It takes no owner argument and has no privileged credentials. **All three migrations are applied and remotely verified in the current project; do not rerun them.**
 
+Apply `supabase/migrations/202610020004_outreach.sql` once for Phase 4. It adds bounded contact-enrichment attempt state, an owner-scoped outreach snapshot and a draft-staleness/history trigger. **All four migrations are applied and remotely verified in the current project; do not rerun them.** Existing ownership/RLS remains unchanged.
+
 Use a confirmed email/password account at `/login`. All workspace routes require an Auth-verified session, including restored sessions. The top bar signs out locally. The Node API independently verifies every protected bearer token with Supabase Auth and uses that token for database operations. `/api/health` reports API availability/configuration only; it does not prove a live database connection.
 
 ## Discovery workflow
@@ -48,7 +50,7 @@ Use a confirmed email/password account at `/login`. All workspace routes require
 2. Find leads or upload a CSV to create a preview. Nothing is saved automatically.
 3. Review location, contact information, source notes, and duplicate evidence. A missing source website is not an audit or a classification.
 4. Select up to 50 results and save. Failures are reported per row; retrying the same preview does not repeat completed saves. Owner-scoped lookup by the server-created preview lead ID also reconciles an insert that committed before its response was lost; retry returns the existing lead without overwriting it.
-5. Open Leads to filter/sort the owner collection, inspect evidence, run audits, and manage notes, pipeline status and follow-ups. Outreach drafts remain Phase 4.
+5. Open Leads to inspect/audit and manage saved leads. In Lead Detail, generate a deterministic draft, edit it, explicitly review/approve it, then copy it for manual use. Outreach groups Ready, Contacted and Follow-up Due leads.
 
 Each source has an isolated adapter. Normalization trims text, normalizes domains/HTTP(S) URLs, validates E.164 phones using the country, normalizes email/country, and bounds ratings/review counts. Invalid contacts become null with visible warnings, while original source fields remain in provenance. Source/sourceId, raw OSM tags, SerpAPI record fields, and CSV columns/row numbers are retained, subject to credential sanitization. Website/social and metadata URLs share sanitization: userinfo is rejected in canonical contacts, metadata userinfo is stripped, fragments and unknown query parameters are removed. Only bounded `page` numbers and validated `lang`/`locale` selectors survive because they select pagination or language without accepting arbitrary secret values. Credential-shaped metadata fields are removed. Oversized metadata records are skipped with a source note.
 
@@ -139,6 +141,8 @@ Backend configuration:
 | `DISCOVERY_NICHES_JSON` | Optional list of `{id,label,tags:[[key,value]]}`; all nine SPEC starter niches by default |
 | `SERPAPI_API_KEY` | Optional free-plan provider credential, server only |
 | `SERPAPI_MONTHLY_LIMIT` | Local monthly attempt cap (default 50); never overrides provider allowance |
+| `HUNTER_API_KEY` | Optional Free-plan fallback credential, server only; lookups require user action |
+| `HUNTER_MONTHLY_LIMIT` | Durable monthly fallback attempt cap (default 10, maximum 50) |
 | `OSM_NOMINATIM_URL`, `OSM_OVERPASS_URL` | Optional HTTPS endpoint overrides, without credentials/query strings/fragments; switch providers through env/restart |
 | `HOST`, `PORT` | Default `127.0.0.1`, `3001` |
 | `AUDIT_SCORING_JSON` | Optional full numeric audit/scoring policy; defaults and validation above |
@@ -146,6 +150,20 @@ Backend configuration:
 If changing PORT, set the web's `API_PROXY_TARGET` accordingly. Browser API requests stay same-origin through the Vite proxy; no permissive CORS is enabled.
 
 Provider references: [Nominatim search](https://nominatim.org/release-docs/latest/api/Search/), [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/), [Overpass public-instance limits](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html), [OSM license](https://www.openstreetmap.org/copyright), [SerpAPI account API](https://serpapi.com/account-api).
+
+## Outreach drafts and contact fallback (Phase 4)
+
+Lead Detail provides deterministic NO_WEBSITE and POOR_WEBSITE drafts based on the current completed assessment. Missing-website wording refers to available listings, not proof that no site exists. Poor-site drafts include at most three failed, supported static checks, ordered by the saved audit weights; rendered mobile behavior and other unknown checks never become claims. Unreachable wording states that the failure may be temporary. No AI, provider-generated text, fake personal history or invented sender details are used.
+
+Generated drafts start pending. Edit subject/message, review the evidence, and explicitly check the review box before saving approval. Copy performs a fresh owner/timestamp/evidence check before browser clipboard access; denial/unavailable clipboard produces clear feedback and manual-copy fallback. Copy never sends anything. Regeneration requires explicit replacement confirmation for edited text. Evidence/audit/classification/scoring changes atomically preserve draft text but mark it stale and revoke approval. Reaudit/regenerate/review before copying again. Notes/status/follow-up-only changes retain unchanged drafts. No-op draft saves do not duplicate activity.
+
+Outreach reads one bounded owner snapshot and paginates 20 items. Ready contains current NO_WEBSITE/POOR_WEBSITE opportunities in New/Qualified with Medium/High priority (or manual Qualified status). Contacted uses the actual Contacted stage. Follow-up Due uses the chosen local calendar day, including today, and excludes Closed/Lost. Every card shows contact data, score/classification/priority, reason, draft state/preview and explicit copy/Contacted/detail actions. Mark Contacted is a guarded manual status update, independent of sending or clipboard success.
+
+Hunter is an isolated **explicit fallback**. Set `HUNTER_API_KEY` only in ignored root/API env, never a VITE variable. Without it, enrichment is disabled. `HUNTER_MONTHLY_LIMIT` is a conservative local attempt cap (default 10, maximum 50); usage persists in ignored `.local/hunter-usage.json`. Keep that file across restarts and run one API process. Failed/no-result/uncertain attempts are counted before network I/O; one global lookup and a five-second cooldown protect the free tier. The account API must report a Free plan and verifiable remaining credits before Domain Search. Extra allocations over the free ceiling are declined. See the official [account/domain API reference](https://hunter.io/api-documentation/v2) and [Free Plan limits](https://help.hunter.io/en/articles/11060999-what-s-included-in-hunter-s-free-plan).
+
+Only worthwhile assessed leads without a usable email qualify. A domain must come from the explicitly audited preserved website; no company-name guess is made for NO_WEBSITE leads with no domain. The lookup requests one generic contact, has no pagination/retry/verification charge, uses a secret header on a fixed HTTPS endpoint, declines redirects, and bounds time/response size. Only a matching-domain, syntactically valid generic email with provider confidence ≥80 is saved as a **candidate**, not a delivery guarantee. Raw provider data, key, personal names and source URLs are discarded. “Use email” is explicit, never overwrites a usable email, and clears assessment/scoring and marks the draft stale because contactability affects scoring.
+
+Per-lead attempt fingerprints and pending/found/no-result/quota/error outcomes persist in Supabase under owner RLS. An unchanged lead cannot be silently looked up again after no result, restart or uncertain response; the user must explicitly retry. Stale/uncertain writes require reload. The live verifier injects clearly labeled provider fixtures; live Hunter remains unverified until a real Free-plan credential is configured. There are no Hunter sequences, mailboxes, sending, CRM, automatic DMs, voice, campaigns or Phase 5 deployment work.
 
 ## Verification and build
 
@@ -168,6 +186,8 @@ npm run verify:phase2
 npm run verify:phase2 -- --live-website
 # Phase 3 persistence, filters/counts, state changes, invalidation, activity and isolation
 npm run verify:phase3
+# Phase 4 drafts/approval/Contacted/staleness, remote persistence/RLS and explicit Hunter fixtures
+npm run verify:phase4
 ```
 
 Live verifiers use two **confirmed, disposable** Auth accounts configured in ignored root `.env` through `SUPABASE_TEST_EMAIL_A`, `SUPABASE_TEST_PASSWORD_A`, `SUPABASE_TEST_EMAIL_B`, and `SUPABASE_TEST_PASSWORD_B`. Do not print/paste/commit their values. Accounts must have no existing `user_settings` row for the prerequisite verifier. Missing setup fails rather than being skipped. Verifiers remove only their generated test rows and end their non-persisted sessions.
@@ -178,7 +198,7 @@ Live verifiers use two **confirmed, disposable** Auth accounts configured in ign
 
 `verify:phase3` signs in both disposable accounts and runs the built management/audit API on an ephemeral loopback port. It checks more than 200 records, concurrent insert/snapshot/count coherence, boundary-label save/filter behavior, anonymous/cross-user RPC denial, pagination/filtering/sorting, seven persisted stages, notes/follow-up changes and clearing, unchanged assessment retention, stale/injected/foreign write rejection, idempotent history, URL sanitization and atomic invalidation. Only its generated fixture IDs are removed; an ignored UUID-only recovery journal supports interrupted cleanup.
 
-Unit tests execute all three actual migrations in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. `npm test` compiles tests and their API imports to ignored `.local/test-build`, then runs only current test files sequentially with a 30-second per-test watchdog. HTML workers use compiled JavaScript, matching production rather than paying TypeScript-loader startup on every test. Readiness waits are bounded and inspections settle only after worker termination on success/error/timeout. Production limits remain five seconds for startup, 750ms for inspection, and the existing HTML/tree/text/heap bounds. These tests complement remote checks; the app uses only Supabase for persistence. Coverage includes snapshot races/coherence/caps/RLS, shared input boundaries, filters/sorting/counts, notes/status/follow-up/history, atomic invalidation, owner/timestamp guards, deterministic audits/scoring, evidence, SSRF/redirect/rebinding/bounds, discovery/CSV/dedupe/retries/quotas and safe Auth/API errors.
+Unit tests execute all four actual migrations in development-only in-memory PostgreSQL via [PGlite](https://pglite.dev/docs/), emulating Supabase Auth roles/identity. `npm test` compiles tests and their API imports to ignored `.local/test-build`, then runs only current test files sequentially with a 30-second per-test watchdog. HTML workers use compiled JavaScript, matching production rather than paying TypeScript-loader startup on every test. Readiness waits are bounded and inspections settle only after worker termination on success/error/timeout. Production limits remain five seconds for startup, 750ms for inspection, and the existing HTML/tree/text/heap bounds. These tests complement remote checks; the app uses only Supabase for persistence. Coverage includes outreach templates/approval/clipboard/edits/invalidation, Hunter eligibility/quota/retry/no-result, snapshot races/coherence/caps/RLS, shared input boundaries, filters/sorting/counts, notes/status/follow-up/history, atomic invalidation, owner/timestamp guards, deterministic audits/scoring, evidence, SSRF/redirect/rebinding/bounds, discovery/CSV/dedupe/retries/quotas and safe Auth/API errors.
 
 Build order: shared contracts → API → web. Outputs: `packages/shared/dist`, `apps/api/dist`, `apps/web/dist`. After building, production smoke tests can use two terminals:
 
@@ -192,14 +212,14 @@ Web preview is http://127.0.0.1:4173 with the local API proxy. A real deployment
 ## Structure and phase boundary
 
 ```text
-apps/web/            React shell, login, Search, management table/detail and dashboard
-apps/api/            Express auth/discovery/audit/management APIs and persistence
-packages/shared/     Lead/API contracts, management filters/sorting/counts
+apps/web/            React shell, login, Search, management/detail/dashboard and outreach
+apps/api/            Express auth/discovery/audit/management/outreach APIs and persistence
+packages/shared/     Lead/API contracts, management helpers and deterministic outreach templates
 supabase/migrations/ V1 schema, owner policies, atomic history/invalidation guard
-scripts/             Safe live Supabase and Phases 1–3 verification
-tests/               Foundation, discovery, audit/security, management and SQL RLS tests
+scripts/             Safe live Supabase and Phases 1–4 verification
+tests/               Foundation, discovery, audit/security, management/outreach and SQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet uses a fixed left sidebar and top bar with one scrolling content outlet. Mobile uses the same vertical sidebar in a hidden off-canvas drawer, opened by the top-bar menu button; never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains and restores keyboard focus, and locks background scrolling. On short screens only the open drawer scrolls to keep navigation and its footer accessible. Phase 3 adds management and dashboard counts; outreach drafts remain unimplemented until Phase 4 approval.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet uses a fixed left sidebar and top bar with one scrolling content outlet. Mobile uses the same vertical sidebar in a hidden off-canvas drawer, opened by the top-bar menu button; never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains and restores keyboard focus, and locks background scrolling. On short screens only the open drawer scrolls to keep navigation and its footer accessible. Phase 4 adds reviewed drafts, manual copy/Contacted actions and guarded contact fallback; Phase 5 has not started.
 
-Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish each approved phase with checks, state update, separate commit/push, and review before proceeding. React, Node.js, Supabase, free tiers. No Next.js, MongoDB, AI, Hunter integration yet, automatic outreach, paid dependency, or V2 features.
+Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish each approved phase with checks, state update, separate commit/push, and review before proceeding. React, Node.js, Supabase, free tiers. Hunter is explicit fallback only. No Next.js, MongoDB, AI, automatic outreach, paid dependency, or V2 features. Stop before Phase 5.

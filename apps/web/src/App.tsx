@@ -4,11 +4,12 @@ import type { HealthResponse } from '@igetjobs/shared';
 import { supabase } from './lib/supabase';
 import { ProtectedRoutes } from './auth';
 import { Login } from './Login';
-import { PageHeader, EmptyState } from './components';
+import { PageHeader } from './components';
 const Search = lazy(async () => ({ default: (await import('./Search')).Search }));
 const Leads = lazy(async () => ({ default: (await import('./Leads')).Leads }));
 const LeadDetail = lazy(async () => ({ default: (await import('./LeadDetail')).LeadDetail }));
 const Dashboard = lazy(async () => ({ default: (await import('./Dashboard')).Dashboard }));
+const Outreach = lazy(async () => ({ default: (await import('./Outreach')).Outreach }));
 
 const navigation = [
   { path: '/', label: 'Dashboard', number: '01' },
@@ -135,12 +136,6 @@ function AppShell() {
   </div>;
 }
 
-function PlaceholderPage({ title, description, emptyTitle, detail }: {
-  title: string; description: string; emptyTitle: string; detail: string;
-}) {
-  return <><PageHeader title={title} description={description} /><EmptyState title={emptyTitle}><p>{detail}</p><span className="tag">Coming in a later phase</span></EmptyState></>;
-}
-
 function Settings() {
   return <>
     <PageHeader title="Settings" description="A home for your workspace preferences." />
@@ -164,7 +159,7 @@ export function App() {
       <Route path="search" element={<Search />} />
       <Route path="leads" element={<Leads />} />
       <Route path="leads/:leadId" element={<LeadDetail />} />
-      <Route path="outreach" element={<PlaceholderPage title="Outreach" description="Prepare personal outreach for human review." emptyTitle="Thoughtful outreach starts with a lead" detail="Editable drafts and approval will be added in Phase 4. Outreach will never auto-send." />} />
+      <Route path="outreach" element={<Outreach />} />
       <Route path="settings" element={<Settings />} />
       <Route path="*" element={<><PageHeader title="Page not found" description="This address does not belong to a workspace section." /><Link className="button" to="/">Return to Dashboard</Link></>} />
     </Route>

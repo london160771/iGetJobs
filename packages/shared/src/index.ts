@@ -1,6 +1,7 @@
 /** Shared V1 contracts. */
 export * from './management.js';
 export * from './validation.js';
+export * from './outreach.js';
 import type { LeadActivity } from './management.js';
 export type LeadSource = 'SERPAPI' | 'OSM' | 'CSV';
 export type LeadClassification = 'NO_WEBSITE' | 'POOR_WEBSITE' | 'ACCEPTABLE_WEBSITE';
@@ -63,6 +64,19 @@ export interface OutreachDraft {
   body: string;
   approval: 'pending' | 'approved';
   updatedAt: IsoDateTime;
+  version?: string;
+  sourceKey?: string;
+  stale?: boolean;
+  edited?: boolean;
+  generatedSubject?: string;
+  generatedBody?: string;
+  reason?: string;
+}
+
+export interface ContactEnrichment {
+  provider: 'HUNTER'; inputKey: string; domain: string; attemptedAt: string;
+  state: 'pending' | 'found' | 'no_result' | 'error' | 'quota' | 'accepted';
+  email?: string; confidence?: number;
 }
 
 /** Missing source data and work not yet performed are null, never fabricated defaults. */
@@ -95,6 +109,7 @@ export interface Lead extends LeadProvenance {
   score: number | null;
   scoreReasons: ScoreReason[];
   outreachDraft: OutreachDraft | null;
+  contactEnrichment?: ContactEnrichment | null;
   status: LeadStatus;
   notes: string;
   followUpAt: IsoDateTime | null;

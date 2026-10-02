@@ -8,8 +8,9 @@ import { RequestError } from './discovery/errors.js';
 import type { AuditService } from './audit/service.js';
 import { auditRoutes } from './audit/routes.js';
 import { managementRoutes, type ManagementService } from './management.js';
+import { outreachRoutes, type OutreachService } from './outreach/service.js';
 
-export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService) {
+export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '100kb' }));
@@ -32,6 +33,7 @@ export function createApp(supabase: SupabaseClient | null, discovery?: Discovery
   });
   app.use('/api/leads', requireAuth(supabase), auditRoutes(audit));
   app.use('/api/management', requireAuth(supabase), managementRoutes(management));
+  app.use('/api/outreach', requireAuth(supabase), outreachRoutes(outreach));
   app.use((_req, res) => {
     const body: ApiError = { error: 'Route not found.' };
     res.status(404).json(body);
