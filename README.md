@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Phases 0–4 approved. Phase 5 production verification in progress:** frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live. Final smoke verification is in progress; see PROJECT_STATE.md for measured results and blockers. New leads remain unclassified and unscored until an audit completes. No V2 work.
+**Phases 0–4 approved. Phase 5 production smoke: NEEDS FIXES.** [Frontend](https://igetjobs.vercel.app) and [API](https://igetjobs-api.onrender.com) are live. Fresh-account workflows and live SerpAPI pass, but production OSM discovery fails at its public upstream. Phase 5 is not complete; see PROJECT_STATE.md for evidence and limitations. New leads remain unclassified and unscored until an audit completes. No V2 work.
 
 ## Local setup
 
@@ -205,6 +205,7 @@ node scripts/verify-production-auth.mjs --create
 # After obtaining the real signup confirmation URL privately in ignored .local:
 node scripts/verify-production-auth.mjs --confirm
 node scripts/verify-production-security.mjs
+node scripts/verify-production-discovery-browser.mjs
 # Both real providers, through the deployed frontend proxy:
 npm run verify:deployed -- --live-source --live-serpapi
 npm run secret:scan
@@ -249,7 +250,9 @@ Vercel's [Hobby plan](https://vercel.com/docs/plans/hobby) is restricted to pers
 6. **Supabase Auth → URL Configuration:** use the actual frontend HTTPS origin as Site URL and allow its confirmation redirect origin. Test signup using an inbox you control. Automated local signup verification uses an explicitly injected response fixture; it does not claim delivered confirmation mail.
 7. **Deployed smoke gate:** once accounts/configuration are ready, set `VERIFY_WEB_URL` to the actual `https://igetjobs….vercel.app/` origin and run `npm run verify:phase5:browser` using local disposable account credentials and an optional Playwright runtime, then `npm run verify:deployed -- --live-source` sequentially. Verify CSV/save/dedupe, OSM/cache, three classifications/scoring, filters/notes/status/follow-up/counts, reviewed drafts/copy/Contacted, logout/login and cross-user isolation on the deployed API. The poor public fixture is a measured HTTP 404; its page quality is explicitly unverified. Public pages can change, so a failed live assertion requires evidence review rather than fabricated results. The earlier phase verifiers run local built APIs against real Supabase; they are regression evidence, not deployed smoke tests. Do not mark Phase 5 complete until deployment and smoke tests pass.
 
-Free Render can sleep/cold-start and reset previews/caches, but database quota survives. Client requests are bounded at three minutes to allow a cold start and bounded discovery; uncertain saves retain retry/stale-write safeguards. Strict worker/fetch bounds remain intact and may decline busy/unsupported pages without inventing evidence. Optional Hunter/SerpAPI remain unverified and disabled. Account/schema setup, real signup confirmation and deployed end-to-end verification are pending; no deployment URL is claimed yet.
+Free Render can sleep/cold-start and reset previews/caches, but database quota survives. Client requests are bounded at three minutes to allow a cold start and bounded discovery; uncertain saves retain retry/stale-write safeguards. Strict worker/fetch bounds remain intact and may decline busy/unsupported pages without inventing evidence. Hunter remains disabled until a real Free-plan credential is configured and verified. Live SerpAPI discovery, reviewed collection, caching and durable reservations now pass in production. Signup, delivered confirmation, application migrations and quota setup are also verified.
+
+The remaining production smoke blocker is OSM: Nominatim city lookup has intermittently returned HTTP 429, and the default Overpass business endpoint has refused connections from Render (safe category `ECONNREFUSED`). A documented public Overpass alternative also failed from Render. The temporary DNS preference was removed; removal of the endpoint override was submitted, but its final dashboard confirmation is pending after browser automation stopped responding. Confirm Render's latest deployment is Live with `OSM_OVERPASS_URL` and `NODE_OPTIONS` absent. No automatic fallback, increased cap or quota reset was introduced. Resolve upstream reachability on the approved free deployment, then rerun `npm run verify:deployed -- --live-source --live-serpapi` before marking Phase 5 complete. Public provider availability is not guaranteed; error feedback remains bounded and safe. All other requested production gates passed, including actual mobile CSV/SerpAPI preview/save, clipboard and cross-user isolation. Full results are recorded in PROJECT_STATE.md.
 
 ## Structure and phase boundary
 
@@ -262,6 +265,6 @@ scripts/             Safe live Supabase and Phases 1–4 verification
 tests/               Foundation, discovery, audit/security, management/outreach and SQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet retains fixed navigation/header with one keyboard-focusable content scroller. Mobile keeps the same hidden off-canvas sidebar, never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains/restores focus and locks background scrolling. On short screens the open drawer alone may scroll to keep all items/footer accessible. Phase 5 deployment preparation is in progress; no V2 work.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet retains fixed navigation/header with one keyboard-focusable content scroller. Mobile keeps the same hidden off-canvas sidebar, never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains/restores focus and locks background scrolling. On short screens the open drawer alone may scroll to keep all items/footer accessible. Phase 5 is deployed but its OSM smoke gate remains unresolved; no V2 work.
 
 Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish approved work with checks, state update, separate commit/push, and review. React, Node.js, Supabase, free tiers. Hunter is explicit fallback only. No Next.js, MongoDB, AI, automatic outreach, paid dependency, or V2 features. Stop for final V1 review after Phase 5 deployment verification.

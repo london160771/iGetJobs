@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Phase 5 smoke verification is in progress, not complete. No V2 work.**
+Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Production smoke: NEEDS FIXES — OSM public-upstream discovery fails from Render. Phase 5 is not complete. No V2 work.**
 
 The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure wording matches recorded evidence and no-op draft saves reset dirty state. The latest user instruction replaces production local quota files with Supabase reservations because Render Free storage is ephemeral. The earlier file-persistence deployment notes are historical; current production requirements are below.
 
@@ -228,7 +228,7 @@ Reviewed base: 17cb0da0bd99100c84152a2e404931611983d049. Authorized scope: the t
 
 ## Limitations and Phase 5 handoff
 
-Phases 0–4 are approved. Auth/lead prerequisites pass. Phase 5 adds a separate quota migration and server-only credential prerequisite; live quota verification is pending that setup. Hunter/SerpAPI remain unverified and disabled. OSM supplies live discovery. Hunter cannot enrich NO_WEBSITE without an audited domain; manual contact entry remains available.
+Phases 0–4 are approved. Auth/lead prerequisites and the Phase 5 quota migration/server-only credential now pass remotely. Live SerpAPI discovery is configured and verified on its Free plan. Hunter remains disabled and unverified. Production OSM is currently blocked by public-upstream failures; local prior verification does not establish production availability. Hunter cannot enrich NO_WEBSITE without an audited domain; manual contact entry remains available.
 
 Live Hunter verification is non-blocking while disabled. A key alone now cannot enable it: `HUNTER_FREE_PLAN_VERIFIED=true` is also required only after real Free-plan credential verification. Production quota durability is Supabase, not Render files. Keep one API process and preserve explicit review/owner RLS/stale-write guards/atomic assessment and draft invalidation.
 
@@ -257,7 +257,7 @@ Mandatory invalidation is implemented and verified in Phase 3. Preserve the owne
 - README contains exact Supabase migration/key, Render Free, Vercel public-only env/proxy, Auth URL and post-deployment smoke instructions. Manual setup, live quota checks, delivered signup confirmation and deployed workflow are blockers for Phase 5 completion. Phases 0–4 locally/live satisfy SPEC.md's eleven workflow criteria; final deployment confirmation remains pending. Never label Phase 5/V1 deployment complete until actual smoke tests pass.
 - Changed file groups: quota migration/API persistence, production/security/static-hosting utilities, Hunter gate, React auth/accessibility/responsive/request polish, deployment configurations, tests/verifiers/dev accessibility dependency, README and this state. SPEC.md, DESIGN.md, PLAN.md and user-owned RLS/invalidation migrations remain unchanged.
 
-### SPEC.md V1 success criteria
+### SPEC.md V1 success criteria — preparation evidence
 
 All eleven criteria pass locally against live Supabase; deployed confirmation is pending for each.
 
@@ -276,16 +276,39 @@ All eleven criteria pass locally against live Supabase; deployed confirmation is
 | 11. Persist in Supabase | Live owner RLS/isolation, logout/login and atomic invalidation |
 
 
-## Phase 5 production smoke — 2026-10-02 (in progress)
+## Phase 5 production smoke — 2026-10-02 (NEEDS FIXES)
 
-- Production frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com both return healthy through the Vercel proxy. Render dashboard confirms Free Node, one service, root workspace build, main/e98d36c, On Commit deployment and no disk. The fifth quota migration/private credential now work remotely.
+- Production frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com both return healthy through the Vercel proxy. Render dashboard confirms Free Node, one service, root workspace build, main/f558e62386b957594804accd8591fe03fa4733cb, On Commit deployment and no disk. The fifth quota migration/private credential work remotely.
 - A fresh disposable email alias was created through the actual Create account UI. Real confirmation mail was received; password sign-in before confirmation returned email_not_confirmed. The real configured Supabase confirmation link was followed, then normal UI login/logout/protected-route checks passed. Credentials remain only in ignored .env; the temporary confirmation-link file was consumed/deleted. Existing account B is used only for isolation. No Auth admin shortcut or sending automation was used.
 - Production API workflow passes CSV preview/save/reload/dedupe, all three measured classifications, score math/reasons, every filter/sort, seven statuses, notes/calendar follow-up, dashboard counts, reviewed edited drafts/copy validation/manual Contacted/no-op history, logout/login persistence, cross-user API/direct database read/update/delete denial, stale writes and atomic assessment/draft invalidation with preserved user text. No website evidence or page quality is invented.
 - Production browser passes all V1 screens/WCAG and fixed sidebar/mobile drawer at five sizes. Actual clipboard, edited draft persistence, unchanged saves, manual Contacted and stale-copy refusal pass against production. All verifier-generated lead IDs are cleaned up sequentially; the disposable Auth account is retained for final review, not deleted through privileged credentials.
-- Remote quota reservation/fresh-client cooldown and public/owner RPC denial pass. Production assets (11 recursively discovered chunks/styles), security headers, blocked env paths and API no-store/nosniff pass. Hunter is disabled. Live SerpAPI returns 20 normalized results using the adapter's active-Free-plan account check, with durable reservation visible. OSM production calls currently return 502/unavailable; exact transport stage is under investigation, so Phase 5 is not complete.
+- Remote quota reservation/fresh-client cooldown and public/owner RPC denial pass. Production assets (11 recursively discovered chunks/styles), security headers, blocked env paths and API no-store/nosniff pass. Hunter is disabled. Live SerpAPI returns 20 normalized results using the adapter's active-Free-plan account check; reviewed save/reload/source provenance and repeated-query caching pass. Fresh quota reads show one reservation for an uncached search and none for cache reuse.
 - Added normal production auth/security verifiers and fresh-account support; extended deployed smoke to all filters/sorts/statuses, direct RLS, invalidation, live provider collection/cache/quota tracking. Safe fixed OSM stage/category diagnostics retain all request/response bounds, redirects, caching and quota safeguards; no raw errors/URLs/bodies/keys are logged. A regression covers safe logs and one-attempt behavior. Initial verifier-only REST signup shape and redundant-global lint assumptions were corrected; signup itself succeeded.
-- Follow-up deployment restart will compare durable quota counters before any new source call. Do not reset usage or increase caps to make verification pass. No V2 work.
-- Diagnostic-fix checks: PASS — 74/74 tests, lint, typecheck, production builds and final lint after verifier expansion. Secret scan passes 110 publishable files/history/12 built web outputs. The existing 501KB Vite chunk advisory remains non-blocking. OSM resolution and the final production rerun remain required.
+- Actual Render redeployment restarted the API; every provider count/period/last-call value matched the pre-deploy snapshot before another source call. Durable usage survives a real restart, as well as fresh-client checks. Failed provider attempts remain charged. No quota reset or increased allowance was used. No V2 work.
+- Remaining blocker: default Overpass business requests fail from Render; safe production logs identify OSM_BUSINESSES/ECONNREFUSED. Nominatim city requests intermittently return HTTP 429, then recover. A documented public Private.coffee Overpass alternative also failed at business fetching. The temporary IPv4 preference was removed; removal of the endpoint override was submitted, but its final dashboard confirmation is pending after browser automation stopped responding. Requested user confirmation: latest deployment Live, OSM_OVERPASS_URL/NODE_OPTIONS absent, no secret values. No automatic retry/fallback, insecure transport or paid service was added. Resolve public-upstream reachability, then rerun live OSM preview/save/reload/cache/quota checks and the combined production smoke before declaring Phase 5 complete.
+- The mobile discovery browser verifier additionally passes malformed CSV feedback, actual file upload/preview/save/navigation/reload, protocol-relative credential filtering in preview and stored provenance, and real SerpAPI Search preview plus one explicitly reviewed save. Verifier-only post-login destination/exact-label assumptions were corrected; application behavior was unchanged. Only generated fixture leads are cleaned up.
+- Final checks: PASS — 74/74 tests, lint, typecheck, production builds and lint after the additional browser verifier. Secret scan passes 111 publishable files/history/12 built web outputs; production dependency audit reports zero vulnerabilities. The existing 501KB Vite chunk advisory remains non-blocking.
+
+### Requested production gates
+
+| Items | Result / evidence |
+| --- | --- |
+| 1–4: create account, confirm email, login/logout, protected routes | PASS — fresh account through actual signup UI and real confirmation link; signed-out UI/API deny access |
+| 5: API health through Vercel proxy | PASS — configured health response; direct API also healthy |
+| 6: OSM discovery | FAIL — upstream business request unavailable; production OSM save/cache cannot be verified until discovery succeeds |
+| 7: live SerpAPI discovery | PASS — active Free-plan check, real results, source ID/provenance, reviewed save/reload, repeat cache |
+| 8–10: CSV, save/reload, deduplication | PASS — real UI upload/save, API duplicate preview, malformed-input feedback and sanitized persisted provenance |
+| 11–13: audit, three classifications, scoring/reasons | PASS — actual missing-website evidence, public HTTP 404 and reachable public HTTPS fixtures; score sum equals numeric score. HTTP failure does not claim page quality |
+| 14–18: filters/sorts, notes, statuses, follow-ups, dashboard | PASS — all supported filters/sorts/seven statuses and coherent fixture count changes; notes and UTC follow-up persist |
+| 19–23: generate/edit/save/copy draft, manual Contacted, login persistence | PASS — real production clipboard/edit/no-op approval browser workflow, approved edited draft persists, repeated Contacted adds no duplicate history, stale writes rejected |
+| 24: desktop/tablet/mobile | PASS — all seven screens at 1280×720, 768×1024, 390×844, 320×740 and 844×320; WCAG checks, fixed sidebar/off-canvas drawer, focus trap/restoration, backdrop/Escape/selection closing and scroll lock |
+| 25: RLS/isolation | PASS — account B cannot read/update/delete fresh-account leads through API or direct database; owner snapshots exclude them |
+| 26–27: durable quotas and SerpAPI tracking | PASS — real API restart preserves quota values; atomic RPCs deny public/owner access, cooldown blocks repeats, cached searches consume no extra reservations |
+| 28–30: no sending, Hunter disabled, secrets | PASS — human approval/manual copy/status only; Hunter unconfigured/disabled; no known private values in deployed assets or tracked history/build outputs |
+
+All eleven SPEC.md V1 workflow criteria are now demonstrated against production through CSV/live SerpAPI, Supabase and browser checks. The stricter requested OSM production gate still fails, so this is not Phase 5 completion or final V1 approval.
+
+Known limitations: public OSM availability/coverage and city bounding-box ambiguity; free Render cold starts and loss of process-local previews/cache; existing bounded owner snapshots/imports/history; conservative static-HTML audits without rendering JavaScript; public audit fixtures may change; clipboard permissions can fail and reviewed text requires manual copying; Hunter stays disabled pending real Free-plan verification; Vercel Hobby commercial-use eligibility must be resolved before business use. Preserve one API process, durable Supabase quotas, owner RLS/CAS/atomic assessment/draft invalidation, pinned fetching and human outreach approval. Stop before V2.
 
 ## Publication and mandatory workflow
 
