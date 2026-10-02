@@ -20,6 +20,8 @@ services:
         sync: false
       - key: SUPABASE_QUOTA_SERVICE_KEY
         sync: false
+      - key: PROVIDER_ALLOWED_USER_IDS
+        sync: false
       - key: HUNTER_FREE_PLAN_VERIFIED
         value: "false"
       - key: HUNTER_MONTHLY_LIMIT

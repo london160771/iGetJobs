@@ -44,7 +44,8 @@ try {
   }
   const [a, b] = accounts;
   const service = createDiscoveryService(process.env);
-  server = createApp(createServerSupabase(settings), service).listen(0, '127.0.0.1');
+  // Local verifier injection only: production reads its private Render allowlist.
+  server = createApp(createServerSupabase(settings), service, undefined, undefined, undefined, undefined, new Set([a.userId])).listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = 'http://127.0.0.1:' + server.address().port;
   async function request(path, account, body) {

@@ -24,15 +24,12 @@ export class SupabaseLeadRepository implements LeadRepository {
     return result.data ? leadFromRow(result.data) : null;
   }
   async identities(): Promise<LeadIdentity[]> {
-    const rows: LeadIdentity[] = [];
-    for (let offset = 0; offset <= 2000; offset += 200) {
-      const result = await this.client.from('leads').select('id,business_name,domain,phone,address,city,country,source,source_id').eq('owner_id', this.ownerId).order('id').range(offset, offset + 199);
-      if (result.error) throw new RequestError(503, 'Saved leads could not be checked. Please try again.');
-      rows.push(...result.data.map(row => leadFromRow(row) as LeadIdentity));
-      if (rows.length > 2000) throw new RequestError(409, 'This workspace exceeds the Phase 1 duplicate-check limit of 2,000 leads.');
-      if (result.data.length < 200) break;
-    }
-    return rows;
+    // One existing stable, security-invoker MVCC snapshot. Inserts after its
+    // statement boundary appear next read; they cannot shift a later HTTP page.
+    const result = await this.client.rpc('lead_management_snapshot');
+    if (result.error || !Array.isArray(result.data)) throw new RequestError(503, 'Saved leads could not be checked. Please try again.');
+    if (result.data.length > 2000) throw new RequestError(409, 'This workspace exceeds the duplicate-check limit of 2,000 leads.');
+    return result.data.map((row: Record<string, unknown>) => leadFromRow(row) as LeadIdentity);
   }
   async list() {
     const result = await this.client.from('leads').select('*').eq('owner_id', this.ownerId).order('created_at', { ascending: false }).limit(100);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { currentDraft, draftLimits, outreachItems, outreachVersion, templateText, worthPursuing, type Lead, type OutreachDraft, type OutreachPage, type OutreachTab } from '@igetjobs/shared';
 import { RequestError } from '../discovery/errors.js';
@@ -12,6 +12,7 @@ import { usageFile, verifiedHunterKey } from '../production.js';
 import { supabaseUsageStore } from '../quota.js';
 import { resolveWebsiteEvidence } from '../website-safety.js';
 import { HunterAdapter, usableEmail, type ContactAdapter } from './hunter.js';
+import { requireProviderAccess } from '../provider-access.js';
 
 function canonical(value: unknown): string {
   function ordered(item: unknown): unknown {
@@ -123,7 +124,7 @@ export function createOutreachService(env: NodeJS.ProcessEnv) {
     return new SupabaseOutreachRepository(client,owner);
   },new HunterAdapter(verifiedHunterKey(env),env.NODE_ENV === 'production' || env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(env) : fileUsageStore(usageFile(env, 'hunter')),Number(env.HUNTER_MONTHLY_LIMIT || '10')));
 }
-export function outreachRoutes(service?: OutreachService) {
+export function outreachRoutes(service?: OutreachService, providerAccess: RequestHandler = requireProviderAccess(new Set())) {
   const router = Router();
   router.use((_req,_res,next) => { if (!service) throw new RequestError(503,'Outreach is not configured.'); next(); });
   router.get('/config',(_req,res) => res.json({ hunterConfigured:service!.hunter.configured }));
@@ -134,6 +135,8 @@ export function outreachRoutes(service?: OutreachService) {
       || typeof page !== 'string' || !/^[1-9]\d{0,3}$/.test(page)) throw new RequestError(400,'Choose a valid outreach tab, calendar day and page.');
     res.json(await service!.list(res.locals.userId,res.locals.accessToken,tab as OutreachTab,today,Number(page)));
   });
+  // Express itself matches the guarded route, including casing/trailing slashes.
+  router.post('/:id/enrich', providerAccess);
   for (const action of ['generate','save','contacted','copy','enrich','acceptEmail'] as const) router.post('/:id/' + action,async (req,res) => {
     if (typeof req.params.id !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(req.params.id) || !req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new RequestError(400,'A lead ID and JSON object are required.');
     res.json({ lead:await service![action](res.locals.userId,res.locals.accessToken,req.params.id,req.body) });

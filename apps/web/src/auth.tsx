@@ -1,10 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { AuthSession, type AuthState } from './lib/auth-session';
 
-interface AuthState { user: User | null; loading: boolean; error: string | null }
 const AuthContext = createContext<AuthState>({ user: null, loading: true, error: null });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -13,33 +12,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = supabase;
     if (!client) return;
     let active = true;
-    let revision = 0;
-    async function verify(session: Session | null) {
-      const current = ++revision;
-      setState({ user: null, loading: true, error: null });
-      try {
-        const result = session ? await client!.auth.getUser(session.access_token) : null;
-        if (active && current === revision) {
-          setState({ user: result?.error ? null : result?.data.user || null, loading: false,
-            error: result?.error ? 'Your session could not be verified. Please sign in again.' : null });
-        }
-      } catch {
-        if (active && current === revision) setState({ user: null, loading: false, error: 'Authentication is temporarily unavailable.' });
-      }
-    }
+    let eventReceived = false;
+    const sessionState = new AuthSession({ user: null, loading: true, error: null }, setState, async session => {
+      const result = await client.auth.getUser(session.access_token);
+      return { user: result.error ? null : result.data.user, unavailable: Boolean(result.error &&
+        (result.error.name === 'AuthRetryableFetchError' || (result.error.status ?? 0) >= 500)) };
+    });
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
       // Keep SDK calls outside its auth event lock, and ignore stale responses.
-      queueMicrotask(() => { if (active) void verify(session); });
+      eventReceived = true;
+      queueMicrotask(() => { if (active) void sessionState.verify(session); });
     });
     void client.auth.getSession().then(({ data, error }) => {
-      if (active && revision === 0) {
+      if (active && !eventReceived) {
         if (error) setState({ user: null, loading: false, error: 'Please sign in again.' });
-        else void verify(data.session);
+        else void sessionState.verify(data.session);
       }
     }).catch(() => {
-      if (active && revision === 0) setState({ user: null, loading: false, error: 'Authentication is temporarily unavailable.' });
+      if (active && !eventReceived) setState({ user: null, loading: false, error: 'Authentication is temporarily unavailable.' });
     });
-    return () => { active = false; subscription.unsubscribe(); };
+    return () => { active = false; sessionState.dispose(); subscription.unsubscribe(); };
   }, []);
   return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
 }
@@ -53,5 +45,5 @@ export function ProtectedRoutes() {
   const location = useLocation();
   if (auth.loading) return <main className="login-page" role="status"><p>Verifying your session…</p></main>;
   if (!auth.user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  return <Outlet />;
+  return <Outlet key={auth.user.id} />;
 }

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 're
 import { Link, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import type { HealthResponse } from '@igetjobs/shared';
 import { supabase } from './lib/supabase';
-import { ProtectedRoutes } from './auth';
+import { ProtectedRoutes, useAuth } from './auth';
 import { Login } from './Login';
 import { PageHeader } from './components';
 const Search = lazy(async () => ({ default: (await import('./Search')).Search }));
@@ -44,6 +44,7 @@ function ApiStatus() {
 }
 
 function AppShell() {
+  const auth = useAuth();
   const location = useLocation();
   const current = navigation.find(item => item.path === location.pathname);
   const mobileQuery = '(max-width: 760px), (max-width: 960px) and (max-height: 500px)';
@@ -129,7 +130,7 @@ function AppShell() {
         <div className="topbar-actions"><ApiStatus /><button className="text-button" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? 'Signing out…' : 'Sign out'}</button></div>
       </header>
       <div className="workspace-content" role="region" aria-label="Workspace content" tabIndex={0}>
-        <main ref={mainRef} id="main" tabIndex={-1}>{signOutError && <p className="form-error" role="alert">Sign-out failed. Please try again.</p>}<Suspense fallback={<p role="status">Loading workspace…</p>}><Outlet /></Suspense></main>
+        <main ref={mainRef} id="main" tabIndex={-1}>{auth.error && <p className="message error-message" role="status">{auth.error}</p>}{signOutError && <p className="form-error" role="alert">Sign-out failed. Please try again.</p>}<Suspense fallback={<p role="status">Loading workspace…</p>}><Outlet /></Suspense></main>
         <footer className="workspace-footer">Find the right businesses. Build better websites.</footer>
       </div>
     </div>

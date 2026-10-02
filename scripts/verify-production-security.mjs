@@ -5,7 +5,7 @@ let checkpoint='Configuration';
 try {
   const settings={...process.env};
   for(const path of ['.env','apps/api/.env','apps/web/.env']) { try { Object.assign(settings,parse(await readFile(path))); } catch { /* Optional local file. */ } }
-  const privateValues=Object.entries(settings).filter(([key,value]) => /SUPABASE|(?:SERPAPI|GEOAPIFY|HUNTER|RENDER|VERCEL)_(?:API_KEY|TOKEN)|DATABASE_URL/.test(key) && value?.length>=5 && !/^(?:VITE_)?SUPABASE_(?:URL|ANON_KEY|PUBLISHABLE_KEY)$/.test(key)).map(([,value])=>value);
+  const privateValues=Object.entries(settings).filter(([key,value]) => /PROVIDER_ALLOWED_USER_IDS|SUPABASE|(?:SERPAPI|GEOAPIFY|HUNTER|RENDER|VERCEL)_(?:API_KEY|TOKEN)|DATABASE_URL/.test(key) && value?.length>=5 && !/^(?:VITE_)?SUPABASE_(?:URL|ANON_KEY|PUBLISHABLE_KEY)$/.test(key)).flatMap(([key,value])=>key==='PROVIDER_ALLOWED_USER_IDS'?value.split(',').map(item=>item.trim()).filter(Boolean):[value]);
   const origin='https://igetjobs.vercel.app';
   async function download(path) {
     const response=await fetch(origin+path,{signal:AbortSignal.timeout(90000)}), reader=response.body.getReader();let size=0;const chunks=[];

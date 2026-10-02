@@ -10,9 +10,11 @@ import { auditRoutes } from './audit/routes.js';
 import { managementRoutes, type ManagementService } from './management.js';
 import { outreachRoutes, type OutreachService } from './outreach/service.js';
 import { serveFrontend } from './frontend.js';
+import { requireProviderAccess } from './provider-access.js';
 
-export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }) {
+export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }, approvedUsers: ReadonlySet<string> = new Set()) {
   const app = express();
+  const providerAccess = requireProviderAccess(approvedUsers);
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -35,14 +37,14 @@ export function createApp(supabase: SupabaseClient | null, discovery?: Discovery
   app.use('/api/discovery', requireAuth(supabase), (req, _res, next) => {
     if (req.method === 'POST' && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body))) throw new RequestError(400, 'A JSON object is required.');
     next();
-  }, discoveryRoutes(discovery));
+  }, discoveryRoutes(discovery, providerAccess));
   app.get('/api/leads', requireAuth(supabase), async (_req, res) => {
     if (!discovery) throw new RequestError(503, 'Discovery is not configured.');
     res.json({ leads: await discovery.list(res.locals.userId as string, res.locals.accessToken as string) });
   });
   app.use('/api/leads', requireAuth(supabase), auditRoutes(audit));
   app.use('/api/management', requireAuth(supabase), managementRoutes(management));
-  app.use('/api/outreach', requireAuth(supabase), outreachRoutes(outreach));
+  app.use('/api/outreach', requireAuth(supabase), outreachRoutes(outreach, providerAccess));
   if (frontend) serveFrontend(app, frontend.directory, frontend.supabaseUrl);
   app.use((_req, res) => {
     const body: ApiError = { error: 'Route not found.' };

@@ -1,3 +1,5 @@
+// LEGACY / HISTORICAL ONLY. Not registered by DiscoveryService. Geoapify replaces
+// public Nominatim/Overpass in V1; retain this adapter for historical regression tests.
 import type { DiscoveryQuery } from '@igetjobs/shared';
 import type { Collection, SourceAdapter } from './types.js';
 import type { Niche } from '../config.js';

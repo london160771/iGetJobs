@@ -239,6 +239,8 @@ Allow configuration for:
 - default niches
 
 ## 14. Authentication and database
+Private personal V1 uses existing confirmed accounts; no public signup UI. Server-side approved-user configuration restricts provider-consuming discovery/enrichment calls without changing owner RLS. No teams, roles or multi-user quota allocations. Hosting remains Vercel Hobby for this personal-use release; review eligibility before commercial/public expansion.
+
 Use Supabase for:
 - authentication
 - persistent lead storage

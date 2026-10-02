@@ -35,7 +35,7 @@ try {
   const productionConfig = createOutreachService(process.env).hunter.configured;
   check(typeof productionConfig === 'boolean','Hunter configuration exposes presence only, without credentials');
   check(!createOutreachService({ ...process.env,HUNTER_API_KEY:'' }).hunter.configured,'Missing Hunter credential disables the production adapter');
-  server = createApp(createServerSupabase(settings),undefined,createAuditService(process.env),createManagementService(process.env),outreach).listen(0,'127.0.0.1'); await once(server,'listening');
+  server = createApp(createServerSupabase(settings),undefined,createAuditService(process.env),createManagementService(process.env),outreach,undefined,new Set([a.owner])).listen(0,'127.0.0.1'); await once(server,'listening');
   const base = 'http://127.0.0.1:' + server.address().port;
   async function request(path,account = a,body,method = 'POST') {
     const response = await fetch(base + path,{ method:body === undefined ? 'GET' : method,headers:{ 'Content-Type':'application/json',...(account ? { Authorization:'Bearer ' + account.token } : {}) },...(body === undefined ? {} : { body:JSON.stringify(body) }),signal:AbortSignal.timeout(35000) });

@@ -28,6 +28,7 @@
     "verify:phase5:browser": "node scripts/verify-phase5-browser.mjs",
     "verify:deployed": "node scripts/verify-deployed.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "verify:auth:browser": "node scripts/verify-auth-browser.mjs",
     "verify:geoapify:production": "node scripts/verify-production-geoapify.mjs"
   },
   "devDependencies": {

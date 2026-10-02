@@ -41,7 +41,7 @@ export function Leads() {
         {select('classification', 'Classification', [...classifications, 'UNAUDITED'], value => value === 'UNAUDITED' ? 'Not audited' : value.replace(/_/g, ' '))}
         <label>Minimum score<input name="minScore" type="number" min="0" max="100" defaultValue={params.get('minScore') || ''} placeholder="0" /></label>
         <label>Maximum score<input name="maxScore" type="number" min="0" max="100" defaultValue={params.get('maxScore') || ''} placeholder="100" /></label>
-        {select('priority', 'Priority', ['High', 'Medium', 'Low'])}{select('status', 'Pipeline status', leadStatuses)}{select('source', 'Source', ['GEOAPIFY', 'OSM', 'SERPAPI', 'CSV'])}
+        {select('priority', 'Priority', ['High', 'Medium', 'Low'])}{select('status', 'Pipeline status', leadStatuses)}{select('source', 'Source', ['GEOAPIFY', 'OSM', 'SERPAPI', 'CSV'], value => value === 'OSM' ? 'OSM (historical)' : value)}
         {select('hasEmail', 'Has email', ['yes', 'no'], value => value === 'yes' ? 'Yes' : 'No')}{select('hasPhone', 'Has phone', ['yes', 'no'], value => value === 'yes' ? 'Yes' : 'No')}
       </div><div className="management-actions"><button className="button" type="submit">Apply filters</button><button className="text-button" type="button" onClick={() => setParams({})}>Clear filters</button></div></details>
     </form>

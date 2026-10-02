@@ -9,7 +9,7 @@ export class SerpApiAdapter implements SourceAdapter {
   readonly source = 'SERPAPI';
   constructor(private apiKey: string | null, private niches: Niche[], private transport: typeof fetch = fetch) {}
   async collect(query: DiscoveryQuery): Promise<Collection> {
-    if (!this.apiKey) throw new RequestError(503, 'SerpAPI is not configured. Choose OpenStreetMap or CSV import.');
+    if (!this.apiKey) throw new RequestError(503, 'SerpAPI is not configured. Choose Geoapify or CSV import.');
     const accountUrl = new URL('https://serpapi.com/account.json');
     accountUrl.searchParams.set('api_key', this.apiKey);
     const account = await fetchJson(accountUrl, {}, this.transport);

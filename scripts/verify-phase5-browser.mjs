@@ -39,16 +39,7 @@ try {
   page.on('pageerror',() => { exceptions++; });
   await page.goto(target.origin + '/leads'); await page.waitForURL(target.origin + '/login'); check(true,'Signed-out workspace redirects to login');
   await accessible(page,'Login');
-  await page.getByRole('button',{ name:'Create an account',exact:true }).click();
-  check(await page.getByLabel('Password').getAttribute('autocomplete') === 'new-password','Signup has a labeled new-password field');
-  await accessible(page,'Signup');
-  // Explicit transport fixture proves confirmation/error UI without creating an
-  // unconfirmed production Auth account or sending a real signup email.
-  await page.route('**/auth/v1/signup',route => route.fulfill({ status:200,contentType:'application/json',body:JSON.stringify({ user:{ id:randomUUID(),email:'fixture@example.invalid' },session:null }) }));
-  await page.getByLabel('Email',{ exact:true }).fill('fixture@example.invalid'); await page.getByLabel('Password',{ exact:true }).fill('fixture-password-only');
-  await page.getByRole('button',{ name:'Create account',exact:true }).click(); await page.getByText('Check your email to confirm your account',{ exact:false }).waitFor();
-  check(true,'Signup confirmation is explicit; signup fixture grants no protected session');
-  await page.unroute('**/auth/v1/signup'); await page.getByRole('button',{ name:'Use Sign in instead',exact:true }).click();
+  check(await page.getByRole('button',{ name:'Create an account',exact:true }).count() === 0,'Private V1 exposes no public signup control');
   await page.getByLabel('Email',{ exact:true }).fill(process.env.SUPABASE_TEST_EMAIL_A); await page.getByLabel('Password',{ exact:true }).fill(process.env.SUPABASE_TEST_PASSWORD_A);
   await page.getByRole('button',{ name:'Sign in',exact:true }).click(); await page.waitForURL(url => url.pathname !== '/login');
   const routes = ['/', '/search','/leads','/leads/' + lead.id,'/outreach','/settings','/missing-page'];

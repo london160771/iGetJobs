@@ -18,7 +18,7 @@ try {
   for (const suffix of ['A','B']) {
     const client = createClient(settings.supabaseUrl,settings.supabaseKey,{ auth:{ persistSession:false,autoRefreshToken:false },global:{ fetch:(input,init) => fetch(input,{ ...init,signal:AbortSignal.timeout(15000) }) } }); clients.push(client);
     const signed = await client.auth.signInWithPassword({ email:process.env['SUPABASE_TEST_EMAIL_' + suffix],password:process.env['SUPABASE_TEST_PASSWORD_' + suffix] });
-    check(!signed.error && signed.data.session,'Smoke account ' + suffix + ' sign-in'); accounts.push({ client,token:signed.data.session.access_token });
+    check(!signed.error && signed.data.session,'Smoke account ' + suffix + ' sign-in'); accounts.push({ client,token:signed.data.session.access_token,userId:signed.data.user.id });
   }
   const [a,b] = accounts;
   const usage=process.env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(process.env) : null;
@@ -34,6 +34,18 @@ try {
     check(result.status===200 && result.data.results[0].status==='saved','Reviewed '+name+' business persists');
     const read=await request('/api/leads/'+row.lead.id);
     check(read.status===200 && read.data.lead.source===name && read.data.lead.provenance.some(item=>item.source===name && item.sourceId),'Real '+name+' source identifier/provenance survives reload');
+  }
+  // Provider authorization is a separate gate so core workflows can be verified
+  // while the operator is still preparing the private Render allowlist.
+  if (process.argv.includes('--provider-access')) {
+  const beforeDenied = usage ? await usage.load() : null;
+  for (const source of ['GEOAPIFY','SERPAPI']) {
+    const blocked = await request('/api/discovery/SEARCH/',b,{ source,country:'GB',city:'Bath',niche:'dentists',ownerId:accounts[0].userId });
+    check(blocked.status === 403,'Unapproved account cannot consume ' + source + ', including route aliases');
+  }
+  const blockedHunter = await request('/api/outreach/11111111-1111-4111-8111-111111111111/ENRICH/',b,{});
+  check(blockedHunter.status === 403,'Unapproved account cannot initiate Hunter enrichment');
+  if (usage) check(JSON.stringify(await usage.load()) === JSON.stringify(beforeDenied),'Denied provider requests reserve no quota');
   }
   check((await request('/api/management/counts',null)).status === 401,'Frontend-proxied API requires authentication');
   check((await request('/api/outreach/config')).data.hunterConfigured === false,'Hunter remains disabled');
