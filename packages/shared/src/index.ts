@@ -1,5 +1,6 @@
 /** Shared V1 contracts. */
 export * from './management.js';
+export * from './validation.js';
 import type { LeadActivity } from './management.js';
 export type LeadSource = 'SERPAPI' | 'OSM' | 'CSV';
 export type LeadClassification = 'NO_WEBSITE' | 'POOR_WEBSITE' | 'ACCEPTABLE_WEBSITE';

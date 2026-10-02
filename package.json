@@ -16,7 +16,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "npm run build -w @igetjobs/shared && npm run typecheck --workspaces && tsc -p tsconfig.json",
     "build": "npm run build --workspaces",
-    "test": "npm run build -w @igetjobs/shared && node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "npm run build -w @igetjobs/shared && tsc -p tsconfig.test.json && node scripts/run-tests.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:phase1": "node scripts/verify-phase1.mjs",
     "verify:phase2": "node scripts/verify-phase2.mjs",

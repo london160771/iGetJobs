@@ -1,4 +1,4 @@
-import type { DiscoveryConfig, DiscoveryQuery } from '@igetjobs/shared';
+import { leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, type DiscoveryConfig, type DiscoveryQuery } from '@igetjobs/shared';
 import { RequestError } from './errors.js';
 
 export const CSV_MAX_BYTES = 40 * 1024;
@@ -24,9 +24,9 @@ export function discoveryOptions(env: NodeJS.ProcessEnv) {
       const input: unknown = JSON.parse(env.DISCOVERY_NICHES_JSON);
       if (!Array.isArray(input) || !input.length || input.length > 30) throw new Error();
       niches = input.map((item: Niche) => {
-        if (!item || !/^[a-z0-9-]{1,40}$/.test(item.id) || typeof item.label !== 'string' || !item.label.trim() || item.label.length > 80
+        if (!item || !/^[a-z0-9-]{1,40}$/.test(item.id) || typeof item.label !== 'string' || !item.label.trim() || !validLeadLabel(item.label)
           || !Array.isArray(item.tags) || !item.tags.length || item.tags.length > 10 || item.tags.some(tag => !Array.isArray(tag) || tag.length !== 2 || tag.some(value => typeof value !== 'string' || !/^[a-z0-9_:.-]{1,60}$/.test(value)))) throw new Error();
-        return item;
+        return { ...item, label: normalizedLeadLabel(item.label)! };
       });
       if (new Set(niches.map(niche => niche.id)).size !== niches.length) throw new Error();
     } catch { throw new Error('DISCOVERY_NICHES_JSON must be a valid niche/tag configuration.'); }
@@ -42,9 +42,9 @@ export function discoveryOptions(env: NodeJS.ProcessEnv) {
 }
 export function validateQuery(input: Record<string, unknown>, config: DiscoveryConfig): DiscoveryQuery {
   const country = typeof input.country === 'string' ? input.country.trim().toUpperCase() : '';
-  const city = typeof input.city === 'string' ? input.city.trim().normalize('NFKC') : '';
+  const city = normalizedLeadLabel(input.city) || '';
   const niche = typeof input.niche === 'string' ? input.niche : '';
-  if (!config.markets.some(market => market.code === country) || city.length < 2 || city.length > 120 || /\p{Cc}/u.test(city)
-    || !config.niches.some(item => item.id === niche)) throw new RequestError(400, 'Choose a configured country and niche, and enter a city (2–120 characters).');
+  if (!config.markets.some(market => market.code === country) || city.length < 2 || !validLeadLabel(input.city) || (typeof input.city === 'string' && /\p{Cc}/u.test(input.city))
+    || !config.niches.some(item => item.id === niche)) throw new RequestError(400, `Choose a configured country and niche, and enter a city (2–${leadLabelMaxLength} characters).`);
   return { country, city, niche };
 }

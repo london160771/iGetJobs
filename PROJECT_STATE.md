@@ -4,6 +4,8 @@
 
 Phases 0–2 are approved and complete, including all reviewed fixes. The user authorized Phase 3 only. Lead management now includes a responsive table/cards, filters, sorting, pagination, notes, seven manual pipeline stages, follow-up dates, source/activity detail, guarded contact corrections and dashboard counts. Assessment invalidation is enforced atomically in both API updates and the database; stale/uncertain saves require reload and hide potentially stale results. **Stop for Phase 3 review. Phase 4 has not started.**
 
+The remaining Phase 3 review fixes replace offset collection reads with an owner-scoped database snapshot, bound/clean up worker tests with compiled execution, and align city/niche limits through shared validation. The user applied the third migration; live snapshot/concurrency/persistence/RLS checks pass. Final repeated checks and publication are recorded below.
+
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
 ## Source of truth and locked scope
@@ -160,6 +162,21 @@ Approved base: 60d06eba7af8f96f99c76fb44841ce60c78e4974. The user approved Phase
 - Secret scan: PASS — actual local configuration values absent from publishable source and Git history; test/private credentials absent from production web output; env/usage/build/verifier artifacts ignored. The existing approximately 500KB Vite chunk advisory remains non-blocking.
 - Changed file groups: management API/wiring, shared contracts/query helpers, Leads/dashboard/detail/forms/API error helper/styles, new SQL migration, management regression tests/live verifier, package script, README and PROJECT_STATE.md. App shell/drawer behavior, discovery/audit implementation, SPEC.md, DESIGN.md and PLAN.md are unchanged.
 
+## Phase 3 review fixes — 2026-10-02
+
+Approved scope: the three remaining Phase 3 review issues only, based on dceec476099a8178ff38d1e0333e287c6f40822c. Phase 4 has not started.
+
+- The user applied supabase/migrations/202610010003_management_snapshot.sql. Management collections/counts now use one stable, security-invoker SQL statement under existing owner RLS, ordered by ID. A scalar JSONB result avoids PostgREST row caps and offset-page movement during inserts. Every response derives rows/counts from its own coherent snapshot; separate requests can see newer committed state. Anonymous execution is denied, ownership is derived from Auth, and no elevated credential is used.
+- The existing 2,000-owner-record cap remains explicit: the function returns at most 2,001 summaries as an overflow sentinel and the API rejects overflow. Large notes, provenance, activity and audit checks are omitted; the saved scoring policy remains available for consistent priority. No persistent snapshot/cache, new table or ownership-policy change is introduced.
+- HTML inspection settles only after its worker terminates on success, error, exit or timeout. Worker-ready test waits are bounded, including while timers are mocked; every test has a 30-second runner watchdog. Tests compile to ignored JavaScript and exercise the production worker entry, avoiding repeated TypeScript-loader startup contention. Production limits remain five seconds for startup, 750ms for inspection and the existing HTML/text/tree/heap bounds.
+- City/niche share a 300-character limit through shared validation across normalization, CSV rows/defaults, discovery queries/niche configuration, management edits, filters and input controls. Raw length and normalized Unicode expansion are bounded. Oversized CSV rows receive visible warnings; edits/queries return 400. No labels are silently truncated. Existing overlong labels remain readable and can be corrected explicitly without blocking unrelated notes/status/follow-up writes.
+- Regression coverage includes the actual three migrations, a concurrent-write statement snapshot, 201/202 unique-row reads, matching Qualified counts, overflow handling, invoker/anonymous/cross-user enforcement, repeated worker cleanup and boundary labels. Live Phase 3 verification additionally interleaves eight Qualified inserts with snapshot/dashboard reads across more than 200 records, verifies final unique counts, no-op history, boundary edit/filter/CSV save and all original management safeguards.
+- Live npm run verify:phase3 and npm run verify:supabase: PASS after the migration. Both accounts sign in; owner persistence/isolation, anonymous denial, notes/status/follow-up clearing, history, stale-write protection and API/database atomic assessment invalidation remain working. Generated fixture IDs are cleaned up.
+- Live npm run verify:phase2 -- --live-website and npm run verify:phase1 -- --live-source: PASS. Pinned HTTPS, SSRF/redirect/rebinding regressions, deterministic audit/scoring/evidence, CSV normalization/persistence, credential sanitization, provenance deduplication and lost-response save recovery remain working. OSM returned 24 normalized businesses and repeated search used the cache.
+- Repeated full suites: PASS — 57/57 tests in three consecutive completed runs, with no stalled readiness waits or worker startup failures. npm run check passed twice, including zero-warning lint, TypeScript and shared/API/web builds; the final run includes the blank/expanded-Unicode label boundaries. The existing approximately 500KB Vite chunk advisory remains non-blocking.
+- Secret scan: PASS — local configuration values are absent from all 87 publishable files and Git file history; test/private credentials are absent from all 10 final web output files. Environment, provider usage, fixture journals, compiled tests and verifier logs remain ignored. No secret values were printed.
+- No dependency, layout/drawer, outreach or Phase 4 behavior is added. Changed file groups: snapshot migration/management API, shared label validation/discovery/UI limits, HTML worker lifecycle, compiled test runner/config/regressions, expanded live management verifier, README and this state. Stop for Phase 3 review before Phase 4.
+
 ## Earlier Phase 0/1 changed file groups
 
 - apps/api/src/auth.ts and app/env/index/Supabase setup: verified authentication, safe routing/configuration/transport.
@@ -202,6 +219,8 @@ At every future completed phase: run tests/lint/typecheck/build, review against 
 
 Phase 3 commit message: feat: implement owner-scoped lead management. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 4.
 
+Separate Phase 3 review-fix commit message: fix: stabilize Phase 3 snapshots, workers, and field limits. Target: origin/main. Confirmed SHA/push status are recorded in Git and the final handoff; stop for review before Phase 4.
+
 ## Last updated
 
-2026-10-01
+2026-10-02

@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
-import { dashboardCounts, filterAndSortLeads, followUpState, summarizeLead, type Lead } from '@igetjobs/shared';
+import { dashboardCounts, filterAndSortLeads, followUpState, leadLabelMaxLength, summarizeLead, type Lead } from '@igetjobs/shared';
 import { normalizeLead } from '../apps/api/src/discovery/normalize.js';
 import { managementChanges, ManagementService, parseLeadFilters, SupabaseManagementRepository } from '../apps/api/src/management.js';
 import { RequestError } from '../apps/api/src/discovery/errors.js';
 import { defaultScoring } from '../apps/api/src/audit/policy.js';
 import { auditLead } from '../apps/api/src/audit/engine.js';
+import { CsvAdapter } from '../apps/api/src/discovery/adapters/csv.js';
+import { discoveryOptions, validateQuery } from '../apps/api/src/discovery/config.js';
 
 const fixture = (name = 'Clinic'): Lead => normalizeLead({ businessName: name, country: 'GB', city: 'London', niche: 'Dentists', email: 'public@clinic.com', phone: '+442079460958', sourceId: name, metadata: {} }, 'CSV').lead;
 const invalid = (error: unknown) => error instanceof RequestError && error.status === 400;
@@ -87,12 +89,61 @@ test('repository update guards owner, ID and timestamp and exposes no database e
   assert.equal((await repository.update(lead, {})).businessName, 'Clinic');
 });
 
+test('collection/counts use one bounded snapshot, without offset reads under concurrent inserts', async () => {
+  const rows = Array.from({ length: 201 }, (_, i) => ({ id: String(i).padStart(5, '0'), business_name: 'Fixture ' + i, status: i === 199 ? 'Qualified' : 'New', classification: null, score: null, audit: null }));
+  let calls = 0, failed = false;
+  const repository = new SupabaseManagementRepository({
+    from: () => { throw new Error('Offset/table scan must never be used.'); },
+    rpc: async (name: string) => {
+      assert.equal(name, 'lead_management_snapshot'); calls++;
+      const data = structuredClone(rows);
+      rows.unshift({ ...rows[0]!, id: 'insert-' + calls, status: 'New' });
+      return { data, error: failed ? { message: 'private details' } : null };
+    }
+  } as never, 'A');
+  const before = await repository.all();
+  assert.equal(calls, 1); assert.equal(before.length, 201); assert.equal(new Set(before.map(row => row.id)).size, 201);
+  assert.equal(dashboardCounts(before).qualified, 1);
+  const after = await repository.all();
+  assert.equal(after.length, 202); assert.equal(new Set(after.map(row => row.id)).size, 202); assert.equal(dashboardCounts(after).qualified, 1);
+  while (rows.length < 2001) rows.push({ ...rows[0]!, id: 'cap-' + rows.length });
+  await assert.rejects(repository.all(), conflict);
+  failed = true;
+  await assert.rejects(repository.all(), err => err instanceof RequestError && err.status === 503 && !err.message.includes('private'));
+});
+
+test('city/niche boundary limits agree for edits, normalized imports, filters and discovery defaults/config', () => {
+  const lead = fixture(), maximum = 'x'.repeat(leadLabelMaxLength), tooLong = maximum + 'x';
+  for (const key of ['city', 'niche'] as const) {
+    const changes = managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, [key]: maximum });
+    assert.equal(changes[key], maximum);
+    const record = new CsvAdapter().collect(`businessName,${key}\nBoundary,${maximum}`, 'boundary.csv').records[0]!;
+    const imported = normalizeLead(record, 'CSV').lead;
+    assert.equal(imported[key], maximum);
+    assert.equal(filterAndSortLeads([summarizeLead(imported)], parseLeadFilters({ [key]: maximum })).length, 1);
+    assert.throws(() => managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, [key]: tooLong }), invalid);
+    assert.throws(() => normalizeLead({ ...record, [key]: tooLong }, 'CSV'), invalid);
+    assert.throws(() => normalizeLead({ ...record, [key]: ' '.repeat(leadLabelMaxLength + 1) }, 'CSV'), invalid);
+    assert.throws(() => normalizeLead({ ...record, [key]: '\uFDFA'.repeat(leadLabelMaxLength) }, 'CSV'), invalid, 'NFKC expansion is bounded too.');
+    assert.throws(() => parseLeadFilters({ [key]: tooLong }), invalid);
+    assert.throws(() => parseLeadFilters({ [key]: '\uFDFA'.repeat(leadLabelMaxLength) }), invalid);
+  }
+  const options = discoveryOptions({ DISCOVERY_NICHES_JSON: JSON.stringify([{ id: 'boundary', label: maximum, tags: [['amenity', 'dentist']] }]) });
+  const defaulted = new CsvAdapter().collect('businessName\nDefault labels', 'defaults.csv', { city: maximum, niche: maximum }).records[0]!;
+  assert.equal(normalizeLead(defaulted, 'CSV').lead.city, maximum); assert.equal(normalizeLead(defaulted, 'CSV').lead.niche, maximum);
+  assert.throws(() => normalizeLead({ ...defaulted, city: tooLong }, 'CSV'), invalid);
+  assert.equal(validateQuery({ country: 'GB', city: maximum, niche: 'boundary' }, options.config).city, maximum);
+  assert.throws(() => validateQuery({ country: 'GB', city: tooLong, niche: 'boundary' }, options.config), invalid);
+  assert.throws(() => discoveryOptions({ DISCOVERY_NICHES_JSON: JSON.stringify([{ id: 'boundary', label: tooLong, tags: [['amenity', 'dentist']] }]) }));
+  assert.deepEqual(managementChanges({ ...lead, city: tooLong, niche: tooLong }, { expectedUpdatedAt: lead.updatedAt, notes: 'Legacy label correction can wait' }), { notes: 'Legacy label correction can wait' });
+});
+
 test('actual management migration atomically preserves history, invalidates assessments and retains owner RLS', async () => {
   const db = new PGlite(), a = '11111111-1111-4111-8111-111111111111', b = '22222222-2222-4222-8222-222222222222';
   try {
     await db.exec(`create role anon noinherit; create role authenticated noinherit; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$; grant usage on schema auth to anon,authenticated;`);
     await db.query('insert into auth.users values ($1),($2)', [a,b]);
-    for (const file of ['202610010001_auth_and_leads.sql', '202610010002_lead_management.sql']) await db.exec(await readFile(new URL('../supabase/migrations/' + file, import.meta.url), 'utf8'));
+    for (const file of ['202610010001_auth_and_leads.sql', '202610010002_lead_management.sql', '202610010003_management_snapshot.sql']) await db.exec(await readFile('supabase/migrations/' + file, 'utf8'));
     const asUser = async (id: string) => { await db.exec('reset role; set role authenticated'); await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id]); };
     await asUser(a);
     const id = (await db.query<{ id: string }>("insert into public.leads(business_name,source,activity) values ('Clinic','CSV','[{\"forged\":true}]') returning id")).rows[0]!.id;
@@ -111,5 +162,28 @@ test('actual management migration atomically preserves history, invalidates asse
     assert.equal((await db.query("update public.leads set notes='Foreign' where id=$1 returning id", [id])).rows.length, 0);
     await db.exec('reset role; set role anon');
     await assert.rejects(db.query('select activity from public.leads'), error => error instanceof Error && 'code' in error && error.code === '42501');
+    await assert.rejects(db.query('select public.lead_management_snapshot()'), error => error instanceof Error && 'code' in error && error.code === '42501');
+    await asUser(a);
+    const snapshot = async () => (await db.query<{ data: Record<string, unknown>[] }>('select public.lead_management_snapshot() as data')).rows[0]!.data;
+    await db.exec("insert into public.leads(business_name,source) select 'Snapshot '||i,'CSV' from generate_series(1,200) as i");
+    const before = await snapshot();
+    assert.equal(before.length, 201); assert.equal(new Set(before.map(row => row.id)).size, 201);
+    // A data-changing CTE and the read share a statement snapshot. The stable
+    // invoker function must see the before-view, then see the insert next request.
+    const during = (await db.query<{ data: Record<string, unknown>[] }>("with inserted as (insert into public.leads(business_name,source,status) values ('Concurrent insert','CSV','Qualified') returning id) select public.lead_management_snapshot() as data,(select count(*) from inserted) as inserted_count")).rows[0]!.data;
+    assert.deepEqual(during, before);
+    const after = await snapshot();
+    assert.equal(after.length, 202); assert.equal(new Set(after.map(row => row.id)).size, 202);
+    assert.equal(after.filter(row => row.status === 'Qualified').length, before.filter(row => row.status === 'Qualified').length + 1);
+    assert.ok(after.every(row => !Object.hasOwn(row, 'notes') && !Object.hasOwn(row, 'activity') && !Object.hasOwn(row, 'provenance') && !Object.hasOwn(row, 'owner_id')));
+    const attributes = (await db.query<{ stable: boolean; invoker: boolean }>("select provolatile='s' as stable,not prosecdef as invoker from pg_proc where oid='public.lead_management_snapshot()'::regprocedure")).rows[0]!;
+    assert.deepEqual(attributes, { stable: true, invoker: true });
+    await asUser(b);
+    assert.deepEqual(await snapshot(), []);
+    await db.exec("insert into public.leads(business_name,source) values ('Own B','OSM')");
+    assert.equal((await snapshot()).length, 1);
+    await asUser(a);
+    await db.exec("insert into public.leads(business_name,source) select 'Cap '||i,'CSV' from generate_series(1,1800) as i");
+    assert.equal((await snapshot()).length, 2001, 'Overflow sentinel is bounded, never silently truncated to the accepted cap.');
   } finally { await db.close(); }
 });

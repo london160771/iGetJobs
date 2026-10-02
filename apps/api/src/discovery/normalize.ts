@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isSupportedCountry, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
-import type { Lead, LeadSource } from '@igetjobs/shared';
+import { leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, type Lead, type LeadSource } from '@igetjobs/shared';
 import { RequestError } from './errors.js';
 
 export interface SourceRecord {
@@ -51,6 +51,7 @@ export function sanitizeMetadata(record: Record<string, unknown>): Record<string
 export function normalizeLead(record: SourceRecord, source: LeadSource): { lead: Lead; warnings: string[] } {
   const businessName = text(record.businessName);
   if (!businessName || businessName.length > 300) throw new RequestError(400, 'Business name is missing or exceeds 300 characters.');
+  for (const key of ['city', 'niche'] as const) if (!validLeadLabel(record[key])) throw new RequestError(400, `City and niche must not exceed ${leadLabelMaxLength} characters; record was not imported.`);
   const warnings: string[] = [];
   const countryText = text(record.country)?.toUpperCase();
   const country = countryText && /^[A-Z]{2}$/.test(countryText) ? countryText : null;
@@ -81,7 +82,7 @@ export function normalizeLead(record: SourceRecord, source: LeadSource): { lead:
   }
   const provenance = { source, sourceId: record.sourceId, metadata };
   return { warnings, lead: {
-    id: randomUUID(), businessName, niche: text(record.niche), country, city: text(record.city), address: text(record.address),
+    id: randomUUID(), businessName, niche: normalizedLeadLabel(record.niche), country, city: normalizedLeadLabel(record.city), address: text(record.address),
     phone, website, domain: website ? new URL(website).hostname.toLowerCase().replace(/^www\./, '') : null,
     email, socials: Object.fromEntries(Object.entries(record.socials || {}).map(([key, value]) => [key, websiteUrl(value)]).filter((entry): entry is [string, string] => Boolean(entry[1]))),
     rating: Number.isFinite(rating) && rating >= 0 && rating <= 5 ? rating : null,

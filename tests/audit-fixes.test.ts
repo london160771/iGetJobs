@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { Worker } from 'node:worker_threads';
+import { setTimeout as delay } from 'node:timers/promises';
 import { normalizeLead } from '../apps/api/src/discovery/normalize.js';
 import { leadFromRow, leadToRow } from '../apps/api/src/discovery/repository.js';
 import { RequestError } from '../apps/api/src/discovery/errors.js';
@@ -64,9 +65,39 @@ test('inspection deadline also terminates a ready worker that stops responding',
   // analysis. The execution deadline must work independently of startup.
   context.mock.method(Worker.prototype, 'postMessage', () => workerReady());
   const analysis = inspectHtmlIsolated(response('<html><body>Fixture</body></html>'), defaultScoring);
-  await ready;
-  context.mock.timers.tick(analysisLimits.workerMs);
-  await assert.rejects(analysis, limited);
+  const rejection = assert.rejects(analysis, limited), deadline = new AbortController();
+  try {
+    // A real timer and the analysis rejection bound readiness even while ordinary
+    // setTimeout is mocked. An errored/exited worker cannot leave an infinite wait.
+    await Promise.race([ready, rejection.then(() => { throw new Error('Worker failed before readiness.'); }),
+      delay(analysisLimits.startupMs, undefined, { signal: deadline.signal }).then(() => { throw new Error('Worker readiness timed out.'); })]);
+    context.mock.timers.tick(analysisLimits.workerMs);
+    await rejection;
+  } finally {
+    deadline.abort();
+    context.mock.timers.tick(analysisLimits.startupMs + analysisLimits.workerMs);
+    await rejection;
+  }
+});
+
+test('worker success/error/timeout settle only after termination and repeated inspections leave no workers', async context => {
+  const live = new Set<Worker>(), originalPost = Worker.prototype.postMessage, originalTerminate = Worker.prototype.terminate;
+  context.mock.method(Worker.prototype, 'postMessage', function (this: Worker, ...args: Parameters<Worker['postMessage']>) { live.add(this); return originalPost.apply(this, args); });
+  context.mock.method(Worker.prototype, 'terminate', async function (this: Worker) { const code = await originalTerminate.call(this); live.delete(this); return code; });
+  for (let i = 0; i < 6; i++) {
+    const checks = await inspectHtmlIsolated(response('<html><body>public@clinic.com</body></html>'), defaultScoring);
+    assert.equal(checks.find(check => check.key === 'contact')?.outcome, 'pass');
+    assert.equal(live.size, 0);
+  }
+  context.mock.method(Worker.prototype, 'postMessage', function (this: Worker) { live.add(this); this.emit('error', new Error('Fixture startup/processing error')); });
+  await assert.rejects(inspectHtmlIsolated(response('<body>Fixture</body>'), defaultScoring), limited);
+  assert.equal(live.size, 0);
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const timeout = inspectHtmlIsolated(response('<body>Fixture</body>'), defaultScoring);
+  context.mock.timers.tick(analysisLimits.startupMs);
+  await assert.rejects(timeout, limited);
+  assert.equal(live.size, 0);
+  assert.equal(analysisLimits.startupMs, 5000); assert.equal(analysisLimits.workerMs, 750);
 });
 
 test('flat website arrays retain sanitized candidates and explicit conflicts through persistence', async () => {

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { classifications, dashboardCounts, filterAndSortLeads, leadSorts, leadStatuses, summarizeLead, type Lead, type LeadFilters, type LeadPage, type ManagedLead } from '@igetjobs/shared';
+import { classifications, dashboardCounts, filterAndSortLeads, leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, leadSorts, leadStatuses, summarizeLead, type Lead, type LeadFilters, type LeadPage, type ManagedLead } from '@igetjobs/shared';
 import { RequestError } from './discovery/errors.js';
 import { leadFromRow, SupabaseLeadRepository } from './discovery/repository.js';
 import { normalizeLead } from './discovery/normalize.js';
@@ -17,9 +17,13 @@ const timestamp = (value: unknown): value is string => {
 };
 export function parseLeadFilters(input: Record<string, unknown>): LeadFilters {
   const allowed = ['niche', 'country', 'city', 'classification', 'priority', 'status', 'source', 'hasEmail', 'hasPhone', 'minScore', 'maxScore', 'sort', 'page'];
-  if (Object.keys(input).some(key => !allowed.includes(key)) || Object.values(input).some(value => typeof value !== 'string' || value.length > 300)) throw new RequestError(400, 'Invalid lead filters.');
+  if (Object.keys(input).some(key => !allowed.includes(key)) || Object.values(input).some(value => typeof value !== 'string' || value.length > leadLabelMaxLength)) throw new RequestError(400, 'Invalid lead filters.');
   const query: LeadFilters = { sort: 'newest', page: 1 };
   for (const key of ['niche', 'country', 'city', 'classification', 'priority', 'status', 'source', 'hasEmail', 'hasPhone'] as const) if (input[key]) query[key] = (input[key] as string).trim();
+  for (const key of ['niche', 'city'] as const) {
+    if (!validLeadLabel(input[key])) throw new RequestError(400, `City and niche must not exceed ${leadLabelMaxLength} characters.`);
+    if (input[key]) query[key] = normalizedLeadLabel(input[key]) || '';
+  }
   for (const [key, values] of Object.entries({ classification: [...classifications, 'UNAUDITED'], priority: ['High', 'Medium', 'Low'], status: leadStatuses, source: ['OSM', 'SERPAPI', 'CSV'], hasEmail: ['yes', 'no'], hasPhone: ['yes', 'no'] })) {
     if (input[key] && !values.includes(input[key] as never)) throw new RequestError(400, 'Invalid lead filters.');
   }
@@ -39,14 +43,19 @@ export function managementChanges(lead: Lead, input: Record<string, unknown>): R
   if (Object.keys(input).some(key => key !== 'expectedUpdatedAt' && !editable.includes(key as never)) || Object.keys(input).length < 2) throw new RequestError(400, 'Only documented management fields may be edited.');
   const merged = { ...lead, ...input };
   for (const key of ['businessName', 'niche', 'country', 'city', 'address', 'phone', 'website', 'email'] as const) {
-    if (input[key] !== undefined && input[key] !== null && (typeof input[key] !== 'string' || (input[key] as string).length > (key === 'businessName' ? 300 : key === 'email' ? 254 : key === 'phone' ? 40 : 2000))) throw new RequestError(400, 'A contact field has an invalid type or length.');
+    if (input[key] !== undefined && input[key] !== null && (typeof input[key] !== 'string' || (input[key] as string).length > (key === 'businessName' ? 300 : key === 'city' || key === 'niche' ? leadLabelMaxLength : key === 'email' ? 254 : key === 'phone' ? 40 : 2000))) throw new RequestError(400, 'A contact field has an invalid type or length.');
   }
   if (input.country && (typeof input.country !== 'string' || !/^[a-z]{2}$/i.test(input.country))) throw new RequestError(400, 'Country must be a two-letter code.');
   for (const key of ['rating', 'reviewCount'] as const) if (input[key] !== undefined && input[key] !== null && (typeof input[key] !== 'number' || !Number.isFinite(input[key]) || input[key] < 0 || (key === 'rating' ? input[key] > 5 : !Number.isSafeInteger(input[key]) || input[key] > 2147483647))) throw new RequestError(400, 'Rating or review count is invalid.');
   if (input.status !== undefined && !leadStatuses.includes(input.status as never)) throw new RequestError(400, 'Invalid pipeline status.');
   if (input.notes !== undefined && (typeof input.notes !== 'string' || input.notes.length > 10000)) throw new RequestError(400, 'Notes must be text up to 10,000 characters.');
   if (input.followUpAt !== undefined && input.followUpAt !== null && !timestamp(input.followUpAt)) throw new RequestError(400, 'Follow-up must be an ISO date/time or null.');
-  const normalized = normalizeLead({ ...merged, sourceId: lead.sourceId, metadata: {} }, lead.source).lead;
+  // Validate labels that are actually edited. Historical overlong labels may be
+  // corrected explicitly; they must not block an unrelated notes/status save.
+  const normalized = normalizeLead({ ...merged,
+    city: Object.hasOwn(input, 'city') ? merged.city : null,
+    niche: Object.hasOwn(input, 'niche') ? merged.niche : null,
+    sourceId: lead.sourceId, metadata: {} }, lead.source).lead;
   for (const key of ['website', 'phone', 'email'] as const) if (input[key] && !normalized[key]) throw new RequestError(400, `The ${key} could not be validated. Correct it or explicitly clear it.`);
   const changes: Record<string, unknown> = {};
   for (const key of editable) {
@@ -66,16 +75,12 @@ export class SupabaseManagementRepository implements ManagementRepository {
   constructor(private client: SupabaseClient, private ownerId: string) {}
   findById(id: string) { return new SupabaseLeadRepository(this.client, this.ownerId).findById(id); }
   async all() {
-    const leads: ManagedLead[] = [];
-    for (let offset = 0; offset <= 2000; offset += 200) {
-      // Exclude large raw provenance, notes and history from collection reads.
-      const response = await this.client.from('leads').select('id,business_name,niche,country,city,address,phone,email,website,domain,classification,score,status,source,source_id,created_at,updated_at,follow_up_at,audit').eq('owner_id', this.ownerId).order('id').range(offset, offset + 199);
-      if (response.error) throw new RequestError(503, 'Lead management could not load. Please retry.');
-      leads.push(...response.data.map(row => summarizeLead(leadFromRow(row))));
-      if (leads.length > 2000) throw new RequestError(409, 'Lead management supports up to 2,000 owner records. Counts and filters were not truncated.');
-      if (response.data.length < 200) break;
-    }
-    return leads;
+    // The invoker RPC derives ownership from Auth/RLS and returns one bounded MVCC
+    // snapshot. Separate requests may see newer state; one response cannot mix pages.
+    const response = await this.client.rpc('lead_management_snapshot');
+    if (response.error || !Array.isArray(response.data)) throw new RequestError(503, 'Lead management could not load. Check the snapshot migration and retry.');
+    if (response.data.length > 2000) throw new RequestError(409, 'Lead management supports up to 2,000 owner records. Counts and filters were not truncated.');
+    return response.data.map((row: Record<string, unknown>) => summarizeLead(leadFromRow(row)));
   }
   async update(lead: Lead, changes: Record<string, unknown>) {
     const response = await this.client.from('leads').update(changes).eq('owner_id', this.ownerId).eq('id', lead.id).eq('updated_at', lead.updatedAt).select('*').maybeSingle();

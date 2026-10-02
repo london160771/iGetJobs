@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { DiscoveryConfig, DiscoveryPreview, SaveAction, SaveResult } from '@igetjobs/shared';
+import { leadLabelMaxLength } from '@igetjobs/shared';
 import { api } from './lib/api';
 import { EmptyState, PageHeader } from './components';
 
@@ -60,7 +61,7 @@ export function Search() {
     {!config ? <div className="message" role="status">{error ? <button className="text-button" onClick={() => setConfigRevision(value => value + 1)}>Retry connection</button> : 'Loading discovery sources…'}</div> : <form className="search-form" onSubmit={event => void collect(event)}>
       <div className="search-fields">
         <label>Country<select value={country} onChange={event => setCountry(event.target.value)} disabled={busy}>{config.markets.map(market => <option key={market.code} value={market.code}>{market.label}</option>)}</select></label>
-        <label>{source === 'CSV' ? 'Default city (optional)' : 'City'}<input value={city} onChange={event => setCity(event.target.value)} placeholder="City, state or region" maxLength={120} required={source !== 'CSV'} minLength={source === 'CSV' ? undefined : 2} disabled={busy} /></label>
+        <label>{source === 'CSV' ? 'Default city (optional)' : 'City'}<input value={city} onChange={event => setCity(event.target.value)} placeholder="City, state or region" maxLength={leadLabelMaxLength} required={source !== 'CSV'} minLength={source === 'CSV' ? undefined : 2} disabled={busy} /></label>
         <label>{source === 'CSV' ? 'Default niche' : 'Niche'}<select value={niche} onChange={event => setNiche(event.target.value)} disabled={busy}>{config.niches.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>Source<select value={source} onChange={event => setSource(event.target.value)} disabled={busy}>{config.sources.map(item => <option key={item.id} value={item.id} disabled={!item.available}>{item.label}{item.available ? '' : ' · unavailable'}</option>)}<option value="CSV">CSV import</option></select></label>
       </div>

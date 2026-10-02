@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { followUpState, leadStatuses, type Lead, type WebsiteResolution } from '@igetjobs/shared';
+import { followUpState, leadLabelMaxLength, leadStatuses, type Lead, type WebsiteResolution } from '@igetjobs/shared';
 import { api, ApiRequestError } from './lib/api';
 
 export function LeadManagement({ lead, busy, needsReload, onBusy, onDirty, onUncertain, onSaved }: { lead: Lead; busy: boolean; needsReload: boolean; onBusy: (value: boolean) => void; onDirty: (value: boolean) => void; onUncertain: () => void; onSaved: (lead: Lead, resolution: WebsiteResolution) => void }) {
@@ -39,7 +39,7 @@ export function LeadManagement({ lead, busy, needsReload, onBusy, onDirty, onUnc
         <label>Follow-up date<input name="followUpAt" type="date" defaultValue={lead.followUpAt?.slice(0, 10) || ''} />{lead.followUpAt && <small>{followUpState(lead.followUpAt, new Date().toLocaleDateString('en-CA'))}</small>}</label>
       </div><label className="notes-field">Notes<textarea name="notes" rows={5} maxLength={10000} defaultValue={lead.notes} placeholder="Conversation notes, next steps, and useful context…" /></label>
       <details className="contact-editor"><summary>Edit business and contact data</summary><p className="muted">Contact or business changes clear the assessment. Source history stays preserved; clearing a website does not erase linked website evidence.</p><div className="management-fields">
-        {text('businessName', 'Business name', 300)}{text('niche', 'Niche')}{text('country', 'Country code', 2)}{text('city', 'City')}{text('address', 'Address')}
+        {text('businessName', 'Business name', 300)}{text('niche', 'Niche', leadLabelMaxLength)}{text('country', 'Country code', 2)}{text('city', 'City', leadLabelMaxLength)}{text('address', 'Address')}
         {text('website', 'Website', 2000)}{text('email', 'Email', 254, 'email')}{text('phone', 'Phone', 40, 'tel')}
         <label>Rating<input name="rating" type="number" min="0" max="5" step="any" defaultValue={lead.rating ?? ''} /></label><label>Review count<input name="reviewCount" type="number" min="0" max="2147483647" step="1" defaultValue={lead.reviewCount ?? ''} /></label>
       </div></details>

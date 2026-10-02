@@ -21,7 +21,7 @@ test('prerequisite migration enforces PostgreSQL owner isolation for both tables
       grant usage on schema auth to anon, authenticated;
     `);
     await db.query('insert into auth.users (id) values ($1), ($2)', [userA, userB]);
-    await db.exec(await readFile(new URL('../supabase/migrations/202610010001_auth_and_leads.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile('supabase/migrations/202610010001_auth_and_leads.sql', 'utf8'));
     const security = await db.query<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(
       "select relrowsecurity, relforcerowsecurity from pg_class where oid in ('public.leads'::regclass, 'public.user_settings'::regclass)"
     );

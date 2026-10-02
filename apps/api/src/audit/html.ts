@@ -91,16 +91,27 @@ export function inspectHtmlIsolated(result: WebsiteFetchResult, config: ScoringC
     // tsx is already the development runner; production loads compiled JS directly.
     const entry = typescript ? `import('tsx/esm/api').then(({ register }) => { register(); return import(${JSON.stringify(source.href)}); });` : source;
     const worker = new Worker(entry, { eval: typescript, execArgv: [], workerData: { htmlAudit: true, result, config }, resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 } });
-    const timeout = () => { void worker.terminate(); reject(declined()); };
-    let timer = setTimeout(timeout, analysisLimits.startupMs);
+    let settled = false, ready = false;
+    // Await termination before settling: callers/tests cannot overlap a leftover
+    // worker with the next inspection. Every success/failure shares this cleanup.
+    const finish = (checks?: AuditCheck[]) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      void worker.terminate().then(() => checks ? resolve(checks) : reject(declined()), () => reject(declined()));
+    };
+    let timer = setTimeout(() => finish(), analysisLimits.startupMs);
     worker.on('message', (message: { ready?: boolean; checks?: AuditCheck[] }) => {
-      clearTimeout(timer);
-      if (message.ready) { timer = setTimeout(timeout, analysisLimits.workerMs); worker.postMessage('inspect'); return; }
-      void worker.terminate();
-      if (message.checks) resolve(message.checks); else reject(declined());
+      if (settled) return;
+      if (message.ready && !ready) {
+        ready = true; clearTimeout(timer);
+        timer = setTimeout(() => finish(), analysisLimits.workerMs);
+        try { worker.postMessage('inspect'); } catch { finish(); }
+        return;
+      }
+      finish(message.checks);
     });
-    worker.once('error', () => { clearTimeout(timer); void worker.terminate(); reject(declined()); });
-    worker.once('exit', () => { clearTimeout(timer); reject(declined()); });
+    worker.once('error', () => finish());
+    worker.once('exit', () => finish());
   });
 }
 if (!isMainThread && workerData?.htmlAudit === true) {

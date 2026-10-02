@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import type { DiscoveryPreview, Lead, SaveResult, SaveSelection } from '@igetjobs/shared';
+import { leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, type DiscoveryPreview, type Lead, type SaveResult, type SaveSelection } from '@igetjobs/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerSupabase } from '../supabase.js';
 import { readServerEnv } from '../env.js';
@@ -42,7 +42,8 @@ export class DiscoveryService {
     const country = typeof input.country === 'string' ? input.country.trim().toUpperCase() : '';
     if (country && !this.options.config.markets.some(item => item.code === country)) throw new RequestError(400, 'Choose a configured country.');
     const niche = this.options.niches.find(item => item.id === input.niche)?.label || '';
-    const collection = new CsvAdapter().collect(input.csv, typeof input.filename === 'string' ? input.filename : 'import.csv', { country, city: typeof input.city === 'string' ? input.city.trim().slice(0, 120) : '', niche });
+    if (!validLeadLabel(input.city)) throw new RequestError(400, `City must not exceed ${leadLabelMaxLength} characters.`);
+    const collection = new CsvAdapter().collect(input.csv, typeof input.filename === 'string' ? input.filename : 'import.csv', { country, city: normalizedLeadLabel(input.city) || '', niche });
     return await this.preview(ownerId, token, 'CSV', collection, false);
   }
   private async preview(ownerId: string, token: string, source: Lead['source'], collection: Collection, cached: boolean) {
