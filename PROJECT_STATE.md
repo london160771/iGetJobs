@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Phase 5: NEEDS FIXES — Geoapify migration deployed, but Render provider credential configuration and mandatory real discovery smoke verification are pending. Phase 5 is not complete. No V2 work.**
+Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Phase 5 complete: all required production smoke gates pass, including live Geoapify. V1 is ready for final review. Stop before V2; final approval remains with the user.**
 
 The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure wording matches recorded evidence and no-op draft saves reset dirty state. The latest user instruction replaces production local quota files with Supabase reservations because Render Free storage is ephemeral. The earlier file-persistence deployment notes are historical; current production requirements are below.
 
@@ -226,7 +226,7 @@ Reviewed base: 17cb0da0bd99100c84152a2e404931611983d049. Authorized scope: the t
 - Final lint: PASS after the browser assertion was added. Secret scan: PASS — actual local configuration absent from 96 publishable files and Git history; private/test credentials absent from 12 web output files. Env/usage/build/log/screenshot/journal artifacts remain ignored. Static checks find no sending integration; the only Hunter transport operations remain explicitly invoked account/domain-search reads.
 - Changed file groups: shared audit/outreach contracts/wording, audit failure recording, editor state reset, unit/live/browser regressions and package script, README and this state. No schema/RLS, layout/drawer, Hunter adapter, discovery, management, SPEC.md, DESIGN.md or PLAN.md change. Stop before Phase 5 for review.
 
-## Limitations and Phase 5 handoff
+## Limitations and prior Phase 5 handoff (historical)
 
 Phases 0–4 are approved. Auth/lead prerequisites and the Phase 5 quota migration/server-only credential now pass remotely. Live SerpAPI discovery is configured and verified on its Free plan. Hunter remains disabled and unverified. Production OSM is currently blocked by public-upstream failures; local prior verification does not establish production availability. Hunter cannot enrich NO_WEBSITE without an audited domain; manual contact entry remains available.
 
@@ -353,7 +353,9 @@ Phase 5 preparation commit message: feat: prepare V1 deployment with durable Sup
 
 2026-10-02
 
-## Phase 5 — Geoapify replacement (2026-10-02)
+## Phase 5 — Geoapify replacement, pre-configuration verification (2026-10-02)
+
+Historical checkpoint: the missing Render credential recorded below is resolved by the final verification section.
 
 User-authorized replacement of the unreliable active Nominatim/Overpass path. No V2 work.
 
@@ -369,3 +371,38 @@ User-authorized replacement of the unreliable active Nominatim/Overpass path. No
 - Deployed `verify:phase5:browser`: PASS for seven routes at 1280×720, 768×1024, 390×844, 320×740 and 844×320. No horizontal/document overflow, one normal workspace scroller, WCAG automated checks, keyboard drawer focus trapping/navigation close, safe loading/error/empty states and no uncaught browser exceptions. Only signup confirmation/error UI uses an explicit transport fixture; prior real signup/delivered confirmation evidence remains historical and was not re-created here. Disposable UI fixture removed.
 - Deployed secret/security scan: PASS, including the Geoapify key in known-private-value scanning, new frontend assets, security headers, denied private paths and API no-store/nosniff. Hunter remains disabled; no automatic sending or paid infrastructure introduced.
 - Remaining mandatory production gate: real Geoapify niche/city search/preview, save one disposable discovered lead, reload/audit/classification/score, cross-provider/repeated-query duplicate behavior, cache and per-search quota increments, then cleanup. The verifier is ready but this gate cannot run while the provider is unconfigured. Phase 5/V1 is not ready for final review yet. Existing V1 limits remain: source coverage/unknown contact fields, conservative ambiguous duplicates, static HTML audits (no rendered mobile verification), process-local caches/previews, 2,000-owner-lead snapshot limit, Render cold starts, disabled/unverified Hunter, and known vendor-chunk build warning.
+
+## Phase 5 complete — final production verification (2026-10-02)
+
+The user confirmed the private Render GEOAPIFY_API_KEY, GEOAPIFY_DAILY_LIMIT=100 and redeployment. Continued from 1fd241ad50181faa0a959e4d5e2dd35f79286efb. No application, adapter, contract, schema, UI or quota-guard changes were needed. Only README/PROJECT_STATE documentation changes are committed for this verification completion. No V2 work.
+
+- Direct https://igetjobs-api.onrender.com/api/health: HTTP 200, status ok, Supabase configured. Frontend-proxied /api/health also passes.
+- `verify:geoapify:production`: PASS through the actual https://igetjobs.vercel.app mobile UI (390×844), using the disposable production account previously created through normal signup and real confirmation, not the old test accounts. Real GB/Bath/dentists discovery returned 22 businesses, uncached, with exactly three durable Geoapify reservations: city lookup and two Places pages. Real preview and explicit one-lead save succeeded. Reload retained normalized source/place ID/provider properties/coordinates.
+- The actual discovered website was audited through production pinned fetching and classified ACCEPTABLE_WEBSITE, score 11. Explicit score reasons reconcile exactly with the numeric score. Assessment/classification/score survived reload. No synthetic audit response was injected.
+- Repeat Geoapify search: cached, 22 rows, zero extra quota; saved business detected as a duplicate. New quota-store client reads the same daily period/count. Earlier remote quota/RLS/cooldown/restart tests and current full SQL/unit regressions remain passing; no quota rows were deleted or reset.
+- Cross-source production check: cached Geoapify results (zero additional provider quota) saved one disposable record; CSV import with the same normalized business/contact/address correctly returned an exact duplicate targeting that record. Explicit source linking retained one lead with GEOAPIFY and CSV provenance after reload. No uncertain duplicate was auto-merged.
+- `verify:deployed -- --live-serpapi`: PASS sequentially after Geoapify cleanup. Real Free-plan SerpAPI discovery, preview/save/reload, cache and durable provider count pass. Actual CSV preview/save/reload/deduplication, public pinned HTTPS audits/all three classifications/scoring reasons, all filters/sorts/statuses, notes/follow-up/counts, reviewed draft creation/edit/save/manual copy tracking/Contacted, duplicate-event prevention, stale-write protection, logout/login persistence and atomic assessment/draft invalidation pass. Both API and direct database deny other-user read/update/delete. Existing test user B is used only for isolation. Hunter remains disabled and nothing sends automatically.
+- Cleanup: the Geoapify UI verifier deleted its generated record; the core verifier deleted CSV/SerpAPI fixtures; the cross-source probe deleted its one lead. A final owner-scoped query across all current generated IDs confirmed zero records remaining. No user records or quota state removed.
+- `verify-production-security`: PASS, 11 deployed frontend assets expose no known private configuration, including the local Geoapify key; safe security headers, private-path denial and API no-store/nosniff remain intact. Provider calls stay server-side.
+- Current checks: npm test PASS (87/87, no skips/cancellations); lint PASS (zero warnings); typecheck PASS; production build PASS; secret scan PASS (117 publishable files, Git history, 12 built frontend outputs). Existing ~501KB vendor-chunk warning remains. No application bug found or implementation fix made.
+- Prior identical-application desktop/tablet/mobile portrait/short-landscape/WCAG/drawer checks, delivered signup confirmation and actual clipboard checks remain recorded above. These unchanged features were not needlessly rerun in this narrowly scoped source verification.
+
+### SPEC.md V1 success criteria — final production evidence
+
+| Criterion | Production evidence |
+| --- | --- |
+| 1. Log in | Normal production UI login/logout, confirmed disposable account; protected-route evidence |
+| 2. Search supported source | Geoapify Bath/dentists and live Free-plan SerpAPI |
+| 3. Collect local businesses | Reviewed provider preview/save/reload |
+| 4. Deduplicate | Saved Geoapify repeat, exact Geoapify/CSV comparison, CSV duplicates and explicit source linking |
+| 5. Audit website presence/quality | Real discovered website plus pinned public HTTPS/HTTP-failure fixtures |
+| 6. Classify | Persisted NO_WEBSITE, POOR_WEBSITE and ACCEPTABLE_WEBSITE |
+| 7. Score with visible reasons | Bounded numeric score, exact reason-point reconciliation and persisted UI assessment |
+| 8. Filter and inspect | Every supported production filter/sort and Lead Detail/reload |
+| 9. Create/edit outreach draft | Human-reviewed generated/edited draft persistence; prior actual clipboard evidence retained |
+| 10. Manually update status | All seven statuses; Contacted idempotency and history |
+| 11. Persist in Supabase | Save/reload/logout-login, RLS/isolation, CAS and atomic invalidation |
+
+All eleven V1 criteria and Phase 5 exit criteria pass. Phase 5 is complete and V1 is ready for final review, not automatically approved for V2. The completion commit/push hash is confirmed in Git and the final handoff.
+
+Known V1 limitations remain honest: provider coverage and absent/unverified contacts; spa/hotel/trade category breadth; the Geoapify account plan/external credit consumption requires operator Free-project discipline; process-local caches/previews reset on Render sleep/redeploy while quotas persist; one API process; bounded 2,000-lead snapshots/imports/history; conservative duplicates; static HTML cannot prove rendered mobile usability or execute site scripts; public/provider availability can change; clipboard permissions may need manual-copy fallback; Hunter stays disabled until a real Free-plan credential is verified; Vercel Hobby commercial-use eligibility must be resolved before business use; and the non-blocking vendor-chunk warning. Preserve pinned fetching, RLS, stale-write protections, atomic assessment/draft invalidation and human outreach approval. Stop before V2.
