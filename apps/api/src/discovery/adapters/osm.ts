@@ -23,7 +23,7 @@ export class OsmAdapter implements SourceAdapter {
     if (cached && cached.expires > Date.now()) return cached.bbox;
     const url = new URL(this.endpoints.nominatim);
     for (const [name, value] of Object.entries({ q: query.city, countrycodes: query.country.toLowerCase(), format: 'jsonv2', addressdetails: '1', featureType: 'city', limit: '3' })) url.searchParams.set(name, value);
-    const raw = await fetchJson(url, { headers }, this.transport);
+    const raw = await fetchJson(url, { headers }, this.transport, 'OSM_CITY');
     // Nominatim returns a JSON array; fetchJson permits arrays as JSON objects.
     const places = (Array.isArray(raw) ? raw : []).filter((place: Place) => place.address?.country_code?.toUpperCase() === query.country) as Place[];
     if (!places.length) throw new RequestError(422, 'No city matched. Try adding its state, province, or region.');
@@ -41,7 +41,7 @@ export class OsmAdapter implements SourceAdapter {
     const niche = this.niches.find(item => item.id === query.niche)!;
     const filters = niche.tags.map(([key, value]) => `nwr["${key}"="${value}"](${bbox.join(',')});`).join('');
     const body = new URLSearchParams({ data: `[out:json][timeout:25][maxsize:8388608];(${filters});out tags center 100;` });
-    const data = await fetchJson(this.endpoints.overpass, { method: 'POST', headers, body }, this.transport);
+    const data = await fetchJson(this.endpoints.overpass, { method: 'POST', headers, body }, this.transport, 'OSM_BUSINESSES');
     if (data.remark || !Array.isArray(data.elements)) throw new RequestError(502, 'OpenStreetMap could not complete the city query. Please try again later.');
     const items = data.elements as { id: number; type: string; tags?: Record<string, string> }[];
     return {

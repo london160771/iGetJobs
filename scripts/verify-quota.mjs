@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseUsageStore } from '../apps/api/dist/quota.js';
 import { readServerEnv } from '../apps/api/dist/env.js';
 config({ path:'.env',quiet:true }); config({ path:'apps/api/.env',quiet:true });
+if (process.env.SUPABASE_SMOKE_EMAIL && process.env.SUPABASE_SMOKE_PASSWORD) {
+  process.env.SUPABASE_TEST_EMAIL_A=process.env.SUPABASE_SMOKE_EMAIL;
+  process.env.SUPABASE_TEST_PASSWORD_A=process.env.SUPABASE_SMOKE_PASSWORD;
+}
 let checkpoint = 'Supabase quota configuration';
 const clients = [];
 const check = (value,label) => { checkpoint = label; if (!value) throw new Error(); console.log('PASS: ' + label); };

@@ -10,8 +10,12 @@ import { auditLead } from '../apps/api/dist/audit/engine.js';
 // Optional browser test runtime; no Playwright dependency is required by the app.
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 config({ path:'.env',quiet:true });
+if (process.env.SUPABASE_SMOKE_EMAIL && process.env.SUPABASE_SMOKE_PASSWORD) {
+  process.env.SUPABASE_TEST_EMAIL_A=process.env.SUPABASE_SMOKE_EMAIL;
+  process.env.SUPABASE_TEST_PASSWORD_A=process.env.SUPABASE_SMOKE_PASSWORD;
+}
 const appUrl = new URL(process.env.VERIFY_WEB_URL || 'http://127.0.0.1:5173/');
-if (!['http:','https:'].includes(appUrl.protocol) || !['127.0.0.1','localhost','[::1]'].includes(appUrl.hostname) || appUrl.username || appUrl.password || appUrl.search || appUrl.hash || appUrl.pathname !== '/') throw new Error('Browser verification requires a loopback app origin.');
+if ((!['127.0.0.1','localhost','[::1]'].includes(appUrl.hostname) && !(appUrl.protocol==='https:' && appUrl.hostname==='igetjobs.vercel.app')) || !['http:','https:'].includes(appUrl.protocol) || appUrl.username || appUrl.password || appUrl.search || appUrl.hash || appUrl.pathname !== '/') throw new Error('Browser verification requires the approved production or loopback origin.');
 const origin = appUrl.origin;
 const settings = readServerEnv(process.env), ids = [];
 const client = createClient(settings.supabaseUrl,settings.supabaseKey,{ auth:{ persistSession:false,autoRefreshToken:false },global:{ fetch:(input,init) => fetch(input,{ ...init,signal:AbortSignal.timeout(15000) }) } });
@@ -24,7 +28,7 @@ try {
   if ((await client.from('leads').insert(leadToRow(lead,login.data.user.id))).error) throw new Error();
   browser = await chromium.launch({ channel:'chrome',headless:true });
   const context = await browser.newContext({ viewport:{ width:1280,height:720 },permissions:['clipboard-read','clipboard-write'] });
-  page = await context.newPage(); page.setDefaultTimeout(20000);
+  page = await context.newPage(); page.setDefaultTimeout(appUrl.hostname==='igetjobs.vercel.app' ? 180000 : 45000);
   page.on('pageerror', error => { console.log('Browser exception category: ' + error.name); });
   checkpoint = 'Browser authentication'; await page.goto(origin + '/login');
   await page.getByLabel('Email',{ exact:true }).fill(process.env.SUPABASE_TEST_EMAIL_A); await page.getByLabel('Password',{ exact:true }).fill(process.env.SUPABASE_TEST_PASSWORD_A); await page.getByRole('button',{ name:'Sign in',exact:true }).click(); await page.waitForURL(origin + '/');

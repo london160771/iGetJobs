@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Phases 0–4 approved. Phase 5 preparation in progress:** V1 polish, accessibility, security, durable database quotas and deployment configuration. Production deployment and final deployed smoke tests are pending account/schema setup. New leads remain unclassified and unscored until an audit completes. No V2 work.
+**Phases 0–4 approved. Phase 5 production verification in progress:** frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live. Final smoke verification is in progress; see PROJECT_STATE.md for measured results and blockers. New leads remain unclassified and unscored until an audit completes. No V2 work.
 
 ## Local setup
 
@@ -200,12 +200,21 @@ npm run verify:quota
 npm run verify:phase5:browser
 # Built/deployed API workflow with real public fixture audits; optional one OSM search:
 npm run verify:deployed -- --live-source
+# Production normal signup/email confirmation/login, with a fresh disposable email:
+node scripts/verify-production-auth.mjs --create
+# After obtaining the real signup confirmation URL privately in ignored .local:
+node scripts/verify-production-auth.mjs --confirm
+node scripts/verify-production-security.mjs
+# Both real providers, through the deployed frontend proxy:
+npm run verify:deployed -- --live-source --live-serpapi
 npm run secret:scan
 ```
 
 Live verifiers use two **confirmed, disposable** Auth accounts configured in ignored root `.env` through `SUPABASE_TEST_EMAIL_A`, `SUPABASE_TEST_PASSWORD_A`, `SUPABASE_TEST_EMAIL_B`, and `SUPABASE_TEST_PASSWORD_B`. Do not print/paste/commit their values. Accounts must have no existing `user_settings` row for the prerequisite verifier. Missing setup fails rather than being skipped. Verifiers remove only their generated test rows and end their non-persisted sessions.
 
-The optional `verify:phase4:browser` checks actual editor save/review/copy/reload/no-op behavior, manual Contacted, stale-draft refusal and desktop/tablet/mobile drawer/scrolling at five sizes. It requires an existing Playwright runtime and Chrome; the application adds no browser-testing dependency. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path/URL if it is not locally resolvable. `VERIFY_WEB_URL` may override the default `http://127.0.0.1:5173/`, restricted to loopback origins. Logs/screenshots/fixture IDs stay in ignored `.local`; only the verifier's generated lead is removed.
+Production smoke uses a fresh account created through the real Create account UI. Set `SUPABASE_SMOKE_EMAIL` privately in ignored `.env`; the creation verifier generates/stores `SUPABASE_SMOKE_PASSWORD` there. The confirmation verifier accepts only the configured Supabase signup verification URL from ignored `.local/production-confirmation-url.txt`, consumes it through the browser and deletes the file. Do not paste confirmation tokens into chat/logs. Deployed API, quota and browser verifiers prefer this fresh account when both smoke variables are present; existing account B is used only for isolation checks. Set `VERIFY_WEB_URL=https://igetjobs.vercel.app/`. Run mutating verifiers sequentially so dashboard baselines do not overlap fixtures. The security verifier checks deployed headers/private paths and recursively scans built assets against known private configuration; it never prints credential values.
+
+The optional `verify:phase4:browser` checks actual editor save/review/copy/reload/no-op behavior, manual Contacted, stale-draft refusal and desktop/tablet/mobile drawer/scrolling at five sizes. It requires an existing Playwright runtime and Chrome; the application adds no browser-testing dependency. Set `PLAYWRIGHT_MODULE` to an installed Playwright module path/URL if it is not locally resolvable. `VERIFY_WEB_URL` may override the default `http://127.0.0.1:5173/`, restricted to loopback or the approved production frontend. Logs/screenshots/fixture IDs stay in ignored `.local`; only the verifier's generated lead is removed.
 
 `verify:supabase` checks live password sign-in, verified identities, persistence, bidirectional cross-user read/update/delete denial, forged inserts, owner-transfer denial, and anonymous access on both tables. `--connectivity-only` probes the schema/gateway but does not prove RLS. `verify:phase1` runs the built API on an ephemeral loopback port and checks token guards, owner-bound previews, normalized CSV storage, retry behavior, explicit source linking, uncertain duplicates, and remote isolation. Its live-source option consumes one guarded OSM attempt; wait at least 15 seconds after any other uncached OSM request and do not make concurrent quota-sensitive requests from separate API processes.
 

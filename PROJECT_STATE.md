@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment preparation and final verification. The user selected Vercel Free project `igetjobs`, Render Free service `igetjobs-api` with one Node process, and existing Supabase for durable quota state. **Phase 5 is in progress, not complete or deployed. No V2 work.**
+Phases 0–4 are approved and complete, including reviewed fixes. Phase 5 only is authorized: V1 polish, hardening, deployment and final verification. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Free/Render Free (one Node process), with existing Supabase for durable quotas. **Phase 5 smoke verification is in progress, not complete. No V2 work.**
 
 The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure wording matches recorded evidence and no-op draft saves reset dirty state. The latest user instruction replaces production local quota files with Supabase reservations because Render Free storage is ephemeral. The earlier file-persistence deployment notes are historical; current production requirements are below.
 
@@ -275,6 +275,17 @@ All eleven criteria pass locally against live Supabase; deployed confirmation is
 | 10. Manually update status | Seven stages, guarded Contacted and idempotent history |
 | 11. Persist in Supabase | Live owner RLS/isolation, logout/login and atomic invalidation |
 
+
+## Phase 5 production smoke — 2026-10-02 (in progress)
+
+- Production frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com both return healthy through the Vercel proxy. Render dashboard confirms Free Node, one service, root workspace build, main/e98d36c, On Commit deployment and no disk. The fifth quota migration/private credential now work remotely.
+- A fresh disposable email alias was created through the actual Create account UI. Real confirmation mail was received; password sign-in before confirmation returned email_not_confirmed. The real configured Supabase confirmation link was followed, then normal UI login/logout/protected-route checks passed. Credentials remain only in ignored .env; the temporary confirmation-link file was consumed/deleted. Existing account B is used only for isolation. No Auth admin shortcut or sending automation was used.
+- Production API workflow passes CSV preview/save/reload/dedupe, all three measured classifications, score math/reasons, every filter/sort, seven statuses, notes/calendar follow-up, dashboard counts, reviewed edited drafts/copy validation/manual Contacted/no-op history, logout/login persistence, cross-user API/direct database read/update/delete denial, stale writes and atomic assessment/draft invalidation with preserved user text. No website evidence or page quality is invented.
+- Production browser passes all V1 screens/WCAG and fixed sidebar/mobile drawer at five sizes. Actual clipboard, edited draft persistence, unchanged saves, manual Contacted and stale-copy refusal pass against production. All verifier-generated lead IDs are cleaned up sequentially; the disposable Auth account is retained for final review, not deleted through privileged credentials.
+- Remote quota reservation/fresh-client cooldown and public/owner RPC denial pass. Production assets (11 recursively discovered chunks/styles), security headers, blocked env paths and API no-store/nosniff pass. Hunter is disabled. Live SerpAPI returns 20 normalized results using the adapter's active-Free-plan account check, with durable reservation visible. OSM production calls currently return 502/unavailable; exact transport stage is under investigation, so Phase 5 is not complete.
+- Added normal production auth/security verifiers and fresh-account support; extended deployed smoke to all filters/sorts/statuses, direct RLS, invalidation, live provider collection/cache/quota tracking. Safe fixed OSM stage/category diagnostics retain all request/response bounds, redirects, caching and quota safeguards; no raw errors/URLs/bodies/keys are logged. A regression covers safe logs and one-attempt behavior. Initial verifier-only REST signup shape and redundant-global lint assumptions were corrected; signup itself succeeded.
+- Follow-up deployment restart will compare durable quota counters before any new source call. Do not reset usage or increase caps to make verification pass. No V2 work.
+- Diagnostic-fix checks: PASS — 74/74 tests, lint, typecheck, production builds and final lint after verifier expansion. Secret scan passes 110 publishable files/history/12 built web outputs. The existing 501KB Vite chunk advisory remains non-blocking. OSM resolution and the final production rerun remain required.
 
 ## Publication and mandatory workflow
 

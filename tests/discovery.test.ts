@@ -13,7 +13,25 @@ import { ProviderGuard, type UsageStore } from '../apps/api/src/discovery/usage.
 import { DiscoveryService } from '../apps/api/src/discovery/service.js';
 import type { LeadRepository } from '../apps/api/src/discovery/repository.js';
 import { RequestError } from '../apps/api/src/discovery/errors.js';
+import { fetchJson } from '../apps/api/src/discovery/http.js';
 import { createApp } from '../apps/api/src/app.js';
+
+test('OSM failure stages are actionable while logs exclude provider URLs, bodies and error details', async () => {
+  const warnings: unknown[][]=[], original=console.warn, previous=process.env.NODE_ENV;
+  console.warn=(...args) => { warnings.push(args); };process.env.NODE_ENV='production';
+  try {
+    let calls=0;
+    const failing=(async () => { calls++;throw new Error('https://fixture.example/?key=private-fixture',{cause:{code:'ENETUNREACH'}}); }) as typeof fetch;
+    await assert.rejects(fetchJson('https://fixture.example/',{},failing,'OSM_CITY'),error=>error instanceof RequestError && error.status===502 && error.message.startsWith('OpenStreetMap city lookup: ') && !error.message.includes('private-fixture'));
+    assert.equal(calls,1);assert.deepEqual(warnings.shift(),['[discovery] OSM_CITY ENETUNREACH']);
+    const forbidden=(async () => new Response('private-fixture',{status:403})) as typeof fetch;
+    await assert.rejects(fetchJson('https://fixture.example/',{},forbidden,'OSM_BUSINESSES'),/OpenStreetMap business search:/);
+    assert.deepEqual(warnings.shift(),['[discovery] OSM_BUSINESSES HTTP_403']);
+    const invalid=(async () => new Response('<html>private-fixture</html>')) as typeof fetch;
+    await assert.rejects(fetchJson('https://fixture.example/',{},invalid,'OSM_CITY'),error=>error instanceof RequestError && !error.message.includes('private-fixture'));
+    assert.deepEqual(warnings.shift(),['[discovery] OSM_CITY INVALID_JSON']);assert.equal(warnings.length,0);
+  } finally { console.warn=original;if(previous===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previous; }
+});
 
 function memoryUsage() {
   let value: Awaited<ReturnType<UsageStore['load']>> = {};

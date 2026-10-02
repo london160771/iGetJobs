@@ -12,6 +12,10 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const require = createRequire(import.meta.url);
 const axeSource = await readFile(require.resolve('axe-core/axe.min.js'),'utf8');
 config({ path:'.env',quiet:true });
+if (process.env.SUPABASE_SMOKE_EMAIL && process.env.SUPABASE_SMOKE_PASSWORD) {
+  process.env.SUPABASE_TEST_EMAIL_A=process.env.SUPABASE_SMOKE_EMAIL;
+  process.env.SUPABASE_TEST_PASSWORD_A=process.env.SUPABASE_SMOKE_PASSWORD;
+}
 const target = new URL(process.env.VERIFY_WEB_URL || 'http://127.0.0.1:5173/');
 const loopback = ['127.0.0.1','localhost','[::1]'].includes(target.hostname);
 if ((!loopback && !(target.protocol === 'https:' && /^igetjobs(?:-[a-z0-9-]+)?\.vercel\.app$/.test(target.hostname))) || target.username || target.password || target.pathname !== '/' || target.search || target.hash) throw new Error('Use the approved Vercel app or loopback origin.');
