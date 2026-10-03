@@ -95,8 +95,17 @@ export class AgentRouterGateway implements AiGateway {
       raw += decoder.decode();
       const value: unknown = JSON.parse(raw);
       if (!value || typeof value !== 'object' || !('choices' in value) || !Array.isArray(value.choices)
-        || value.choices.length !== 1 || !value.choices[0]?.message || typeof value.choices[0].message.content !== 'string') throw new Error();
-      return value.choices[0].message.content;
+        || value.choices.length !== 1 || !value.choices[0]?.message) throw new Error();
+      const content: unknown = value.choices[0].message.content;
+      if (typeof content === 'string') return content;
+      // Some OpenAI-compatible gateways encode text as content parts. Accept only
+      // a small, unambiguous text-only form; never use reasoning or non-text parts.
+      if (Array.isArray(content) && content.length > 0 && content.length <= 8
+        && content.every(part => part && typeof part === 'object' && !Array.isArray(part)
+          && 'type' in part && part.type === 'text' && 'text' in part && typeof part.text === 'string')) {
+        return content.map(part => (part as { text: string }).text).join('');
+      }
+      throw new Error();
     } catch { throw new RequestError(502,'AI returned an unusable response. Your current work is unchanged.'); }
   }
 }
