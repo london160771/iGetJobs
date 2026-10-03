@@ -146,7 +146,8 @@ export interface DuplicateCheck {
   canLink: boolean;
   matches: { businessName: string; address: string | null; city: string | null; source: LeadSource; persisted: boolean }[];
 }
-export interface PreviewRow { lead: Lead; duplicate: DuplicateCheck; warnings: string[] }
+export type DiscoverySignal = 'STRONG_DISCOVERY_SIGNAL' | 'WEBSITE_PRESENT' | 'NEEDS_CONTACT_ENRICHMENT' | 'WEBSITE_EVIDENCE_REVIEW';
+export interface PreviewRow { lead: Lead; duplicate: DuplicateCheck; warnings: string[]; discoverySignal: DiscoverySignal; contactable: boolean }
 export interface DiscoveryPreview {
   id: string;
   expiresAt: IsoDateTime;

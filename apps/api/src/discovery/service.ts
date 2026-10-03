@@ -8,6 +8,7 @@ import { readServerEnv } from '../env.js';
 import { discoveryOptions, validateQuery } from './config.js';
 import { normalizeLead } from './normalize.js';
 import { duplicateCheck, type LeadIdentity } from './dedupe.js';
+import { discoveryQuality } from './quality.js';
 import { SupabaseLeadRepository, type LeadRepository } from './repository.js';
 import { ProviderGuard, fileUsageStore } from './usage.js';
 import { CsvAdapter } from './adapters/csv.js';
@@ -56,7 +57,7 @@ export class DiscoveryService {
       try {
         if (Buffer.byteLength(JSON.stringify(record.metadata)) > 32 * 1024) throw new RequestError(400, 'Source metadata exceeds 32KB; record was not imported.');
         const { lead, warnings } = normalizeLead(record, source);
-        preview.rows.push({ lead, warnings, duplicate: duplicateCheck(lead, candidates, persisted) });
+        preview.rows.push({ lead, warnings, duplicate: duplicateCheck(lead, candidates, persisted), ...discoveryQuality(lead) });
         candidates.push(lead);
       } catch (error) {
         preview.warnings.push(`Source row ${index + 1}: ${error instanceof RequestError ? error.message : 'Record could not be normalized.'}`);

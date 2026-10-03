@@ -5,6 +5,7 @@ import type { DiscoveryConfig, DiscoveryPreview, SaveAction, SaveResult } from '
 import { leadLabelMaxLength } from '@igetjobs/shared';
 import { api } from './lib/api';
 import { EmptyState, PageHeader } from './components';
+import { initialPreviewChoices, selectedPreviewChoices } from './discovery-selection';
 
 export function Search() {
   const [config, setConfig] = useState<DiscoveryConfig | null>(null);
@@ -30,18 +31,17 @@ export function Search() {
   async function collect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!config || busy) return;
-    setBusy(true); setError(null); setNotice(null); setPreview(null); setResults({});
+    setBusy(true); setError(null); setNotice(null); setPreview(null); setResults({}); setChoices({});
     try {
       if (source === 'CSV' && (!file || file.size > config.csvMaxBytes)) throw new Error('Choose a UTF-8 CSV file, 40KB or smaller.');
       const payload = source === 'CSV' ? { csv: await file!.text(), filename: file!.name, country, city, niche } : { source, country, city, niche };
       const value = await api<DiscoveryPreview>('/api/discovery/' + (source === 'CSV' ? 'import' : 'search'), { method: 'POST', body: JSON.stringify(payload) });
       setPreview(value);
-      let selected = 0;
-      setChoices(Object.fromEntries(value.rows.map(row => [row.lead.id, row.duplicate.kind === 'new' && selected++ < 50 ? 'save' : 'skip'])));
+      setChoices(initialPreviewChoices(value));
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Results could not be loaded.'); }
     finally { setBusy(false); }
   }
-  const selected = Object.entries(choices).filter(([id, action]) => action !== 'skip' && results[id]?.status !== 'saved' && results[id]?.status !== 'linked');
+  const selected = selectedPreviewChoices(choices, results);
   async function save() {
     if (!preview || busy || !selected.length) return;
     setBusy(true); setError(null); setNotice(null);
@@ -72,16 +72,17 @@ export function Search() {
     {busy && <p className="message" role="status">{preview ? 'Saving selected results…' : 'Collecting and checking results…'}</p>}
     {!preview && !busy && <EmptyState title="A focused search starts here"><p>Choose a city and niche, or import a CSV. Website auditing and scoring come after discovery.</p></EmptyState>}
     {preview && <section className="results-section" aria-labelledby="results-heading">
-      <div className="results-heading"><div><h2 id="results-heading">{preview.rows.length} results to review</h2><p className="muted">{preview.cached ? 'Cached source results · ' : ''}Preview lasts 30 minutes. Save up to 50 at a time.</p></div><button className="button" type="button" disabled={busy || selected.length === 0 || selected.length > 50} onClick={() => void save()}>Save selected ({selected.length})</button></div>
+      <div className="results-heading"><div><h2 id="results-heading">{preview.rows.length} results to review</h2><p className="muted">{preview.cached ? 'Cached source results · ' : ''}All results start at Skip. Choose up to 50 to save. Preview lasts 30 minutes.</p></div><button className="button" type="button" disabled={busy || selected.length === 0 || selected.length > 50} onClick={() => void save()}>Save selected ({selected.length})</button></div>
       {selected.length > 50 && <p className="message error-message" role="alert">Select no more than 50 results at a time.</p>}
       {preview.warnings.length > 0 && <details className="preview-warnings"><summary>Source notes ({preview.warnings.length})</summary><ul>{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
       {preview.rows.length === 0 && <p className="message">No named businesses were found. Try another city or niche, or check the source notes.</p>}
-      <div className="lead-results">{preview.rows.map(({ lead, duplicate, warnings }) => {
+      <div className="lead-results">{preview.rows.map(({ lead, duplicate, warnings, discoverySignal, contactable }) => {
         const result = results[lead.id]; const done = result?.status === 'saved' || result?.status === 'linked';
         return <article className="lead-result" key={lead.id}>
           <div className="lead-result-main"><div className="lead-title"><h3>{lead.businessName}</h3><span className="tag">{lead.source}</span><span className={`tag ${duplicate.kind !== 'new' ? 'review-tag' : ''}`}>{done ? result.status === 'linked' ? 'Source added' : 'Saved' : duplicate.kind === 'new' ? 'New result' : duplicate.canLink ? 'Already saved' : 'Review duplicate'}</span></div>
             <p className="muted">{[lead.niche, lead.city, lead.country].filter(Boolean).join(' · ')}</p>{lead.address && <p>{lead.address}</p>}
-            <div className="lead-contact">{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">{lead.domain} ↗</a> : <span className="muted">No website in source</span>}{lead.phone && <span>{lead.phone}</span>}{lead.email && <span>{lead.email}</span>}</div>
+            <p className="discovery-quality"><strong>{discoverySignal === 'STRONG_DISCOVERY_SIGNAL' ? 'Strong discovery signal' : discoverySignal === 'NEEDS_CONTACT_ENRICHMENT' ? 'Needs contact enrichment' : discoverySignal === 'WEBSITE_EVIDENCE_REVIEW' ? 'Website evidence needs review' : 'Website found · audit after saving'}</strong>{discoverySignal === 'WEBSITE_PRESENT' && contactable ? <span> · Contactable</span> : null}</p>
+            <div className="lead-contact">{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">{lead.domain} ↗</a> : discoverySignal === 'WEBSITE_EVIDENCE_REVIEW' ? <span className="muted">Review source website evidence</span> : <span className="muted">No website in source</span>}{lead.phone && <span>{lead.phone}</span>}{lead.email && <span>{lead.email}</span>}{Object.entries(lead.socials).map(([label, url]) => <a key={label} href={url} target="_blank" rel="noreferrer">{label} ↗</a>)}</div>
             {duplicate.kind !== 'new' && <div className="duplicate-note"><strong>{duplicate.kind === 'possible' ? 'Possible match — review before saving separately.' : 'Matching record — choose how to handle it.'}</strong><p>{duplicate.reasons.join(' · ')}</p>{duplicate.matches.map((match, index) => <p key={index}>Matches {match.businessName}{match.address ? ' · ' + match.address : ''}{match.city ? ' · ' + match.city : ''} ({match.persisted ? 'saved' : 'in this preview'}, {match.source})</p>)}</div>}
             {warnings.map((warning, index) => <p className="row-warning" key={index}>{warning}</p>)}{result?.status === 'failed' && <p className="form-error" role="alert">{result.error}</p>}
           </div><div className="lead-result-action"><label>Save choice<span className="sr-only"> for {lead.businessName}</span><select aria-label={`Save choice for ${lead.businessName}`} value={done ? 'skip' : choices[lead.id] || 'skip'} disabled={busy || done} onChange={event => setChoices(current => ({ ...current, [lead.id]: event.target.value as SaveAction | 'skip' }))}><option value="skip">{done ? 'Completed' : 'Skip'}</option>{duplicate.kind === 'new' && <option value="save">Save new lead</option>}{duplicate.canLink && <option value="link">Add source to saved lead</option>}{duplicate.kind !== 'new' && <option value="separate">Reviewed · save separately</option>}</select></label></div>

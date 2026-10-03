@@ -31,6 +31,7 @@ select:focus-visible { outline: 3px solid #157568; outline-offset: 2px; }
 .lead-title { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
 .lead-title h3 { margin: 0; font-size: .95rem; }
 .lead-contact { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.discovery-quality { margin: 0; color: #365a4c; font-size: .78rem; line-height: 1.35; }
 .lead-contact a, .source-attribution a { color: #126759; text-decoration: underline; text-underline-offset: 3px; }
 .lead-result-action { width: 200px; flex-shrink: 0; }
 .review-tag { background: #fff4e7; border-color: #e8c6ad; color: #8b4624; }
