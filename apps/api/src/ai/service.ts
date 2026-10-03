@@ -76,7 +76,7 @@ export class AgentRouterGateway implements AiGateway {
     let response: Response;
     try {
       response = await this.transport(this.baseUrl + '/chat/completions', { method:'POST', signal:AbortSignal.timeout(15000),
-        headers:{ Authorization:'Bearer ' + this.key, 'Content-Type':'application/json' },
+        headers:{ Authorization:'Bearer ' + this.key, 'Content-Type':'application/json', Accept:'application/json', 'User-Agent':'iGetJobs/1.0.3' },
         body:JSON.stringify({ model:this.model, reasoning_effort:'none', max_tokens:maxTokens, temperature:0,
           messages:[{ role:'system',content:instructions },{ role:'user',content:facts }] }) });
     } catch { throw new RequestError(503,'AI is unavailable right now. Your current work is unchanged.'); }

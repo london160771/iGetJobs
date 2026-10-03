@@ -101,6 +101,8 @@ test('AgentRouter transport is one bounded server request and never returns prov
   const gateway = new AgentRouterGateway('fixture-secret','deepseek-v4-flash','https://agentrouter.org/v1',async (url,init) => {
     requests++; assert.equal(url,'https://agentrouter.org/v1/chat/completions');
     assert.equal((JSON.parse(init!.body as string) as { reasoning_effort:string }).reasoning_effort,'none');
+    assert.equal(new Headers(init!.headers).get('accept'),'application/json');
+    assert.equal(new Headers(init!.headers).get('user-agent'),'iGetJobs/1.0.3');
     return new Response(JSON.stringify({ choices:[{ message:{ content:'Fixture suggestion' } }] }),{ status:200 });
   });
   assert.equal(await gateway.complete('instructions','facts',150),'Fixture suggestion'); assert.equal(requests,1);
