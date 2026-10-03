@@ -22,9 +22,9 @@ try {
   }
   const [a,b] = accounts;
   const usage=process.env.SUPABASE_QUOTA_SERVICE_KEY ? supabaseUsageStore(process.env) : null;
-  async function request(path,account = a,body,method = 'POST') {
+  async function request(path,account = a,body,method = 'POST',origin = url.origin) {
     checkpoint = 'Request ' + path.split('?')[0];
-    const response = await fetch(url.origin + path,{ method:body === undefined ? 'GET' : method,headers:{ ...(account ? { Authorization:'Bearer ' + account.token } : {}),...(body === undefined ? {} : { 'Content-Type':'application/json' }) },...(body === undefined ? {} : { body:JSON.stringify(body) }),signal:AbortSignal.timeout(180000) });
+    const response = await fetch(origin + path,{ method:body === undefined ? 'GET' : method,headers:{ ...(account ? { Authorization:'Bearer ' + account.token } : {}),...(body === undefined ? {} : { 'Content-Type':'application/json' }) },...(body === undefined ? {} : { body:JSON.stringify(body) }),signal:AbortSignal.timeout(180000) });
     return { status:response.status,data:await response.json() };
   }
   async function collectSource(preview,name) {
@@ -39,12 +39,20 @@ try {
   // while the operator is still preparing the private Render allowlist.
   if (process.argv.includes('--provider-access')) {
   const beforeDenied = usage ? await usage.load() : null;
+  // Vercel can reject uppercase/trailing-slash aliases before its external
+  // rewrite. Verify the normal proxy route and native Express aliases directly.
+  const aliasOrigin = url.hostname.endsWith('.vercel.app') ? 'https://igetjobs-api.onrender.com' : url.origin;
   for (const source of ['GEOAPIFY','SERPAPI']) {
-    const blocked = await request('/api/discovery/SEARCH/',b,{ source,country:'GB',city:'Bath',niche:'dentists',ownerId:accounts[0].userId });
-    check(blocked.status === 403,'Unapproved account cannot consume ' + source + ', including route aliases');
+    const query = { source,country:'GB',city:'Bath',niche:'dentists',ownerId:accounts[0].userId };
+    const blocked = await request('/api/discovery/search',b,query);
+    check(blocked.status === 403,'Unapproved account cannot consume proxied ' + source);
+    const alias = await request('/api/discovery/SEARCH/',b,query,'POST',aliasOrigin);
+    check(alias.status === 403,'Unapproved account cannot consume ' + source + ' through native route aliases');
   }
-  const blockedHunter = await request('/api/outreach/11111111-1111-4111-8111-111111111111/ENRICH/',b,{});
-  check(blockedHunter.status === 403,'Unapproved account cannot initiate Hunter enrichment');
+  const hunterPath = '/api/outreach/11111111-1111-4111-8111-111111111111/';
+  const blockedHunter = await request(hunterPath + 'enrich',b,{});
+  const hunterAlias = await request(hunterPath + 'ENRICH/',b,{},'POST',aliasOrigin);
+  check(blockedHunter.status === 403 && hunterAlias.status === 403,'Unapproved account cannot initiate Hunter enrichment through proxy or native aliases');
   if (usage) check(JSON.stringify(await usage.load()) === JSON.stringify(beforeDenied),'Denied provider requests reserve no quota');
   }
   check((await request('/api/management/counts',null)).status === 401,'Frontend-proxied API requires authentication');
