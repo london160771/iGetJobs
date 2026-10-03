@@ -6,6 +6,7 @@ import { PageHeader } from './components';
 import { AuditSummary } from './AuditSummary';
 import { LeadManagement } from './LeadManagement';
 import { OutreachEditor } from './OutreachEditor';
+import { AiInsights } from './AiInsights';
 export function LeadDetail() {
   const { leadId } = useParams();
   return <LeadAudit key={leadId} leadId={leadId || ''} />;
@@ -62,6 +63,7 @@ function LeadAudit({ leadId }: { leadId: string }) {
       </section>
       {success && <p className="message success-message" role="status">Audit, classification, and score saved.</p>}
       <section className="audit-panel"><h2>Opportunity assessment</h2>{needsReload ? <p className="row-warning">Lead state is uncertain. Reload before using an assessment or saving further changes.</p> : <AuditSummary lead={detail.lead} detailed />}</section>
+      <AiInsights key={'ai-' + detail.lead.updatedAt} lead={detail.lead} blocked={busy || unsaved || needsReload} onBusy={setBusy} />
       <OutreachEditor key={'draft-' + detail.lead.updatedAt} lead={detail.lead} busy={busy} blocked={needsReload || editing} onBusy={setBusy} onDirty={setDraftEditing} onUncertain={() => { setNeedsReload(true); setSuccess(false); setSaved(false); }} onSaved={lead => { setDetail({ ...detail,lead }); setDraftEditing(false); setSuccess(false); setSaved(true); }} />
       <section className="audit-panel"><h2>Business and contact</h2><p>{detail.lead.address || 'No address recorded'}</p><div className="lead-contact">{detail.lead.website && <a href={detail.lead.website} target="_blank" rel="noreferrer">{detail.lead.domain} ↗</a>}{detail.lead.phone && <span>{detail.lead.phone}</span>}{detail.lead.email && <span>{detail.lead.email}</span>}{Object.entries(detail.lead.socials).map(([label, url]) => <a key={label} href={url} target="_blank" rel="noreferrer">{label} ↗</a>)}</div><p className="muted">Recorded data; not independently verified. Rating: {detail.lead.rating ?? 'unknown'} · Reviews: {detail.lead.reviewCount ?? 'unknown'}</p></section>
       <section className="audit-panel"><h2>Source history</h2><p>Canonical source: {detail.lead.source} · {detail.lead.sourceId || 'No source identifier'}</p>{detail.lead.provenance.map((entry, index) => <details key={index}><summary>{entry.source} · {entry.sourceId || 'No source identifier'}</summary><pre className="provenance-data">{JSON.stringify(entry.metadata || {}, null, 2)}</pre></details>)}</section>

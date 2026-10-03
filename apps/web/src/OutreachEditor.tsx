@@ -5,17 +5,21 @@ import { api, ApiRequestError } from './lib/api';
 export function OutreachEditor({ lead, busy, blocked, onBusy, onSaved, onUncertain, onDirty }: { lead: Lead; busy: boolean; blocked: boolean; onBusy(value: boolean): void; onSaved(lead: Lead): void; onUncertain(): void; onDirty(value: boolean): void }) {
   const [error,setError] = useState<string | null>(null), [message,setMessage] = useState<string | null>(null);
   const [edited,setEdited] = useState(false), [configured,setConfigured] = useState(false);
+  const [aiConfigured,setAiConfigured] = useState(false), [aiBusy,setAiBusy] = useState(false);
+  const [suggestion,setSuggestion] = useState<{ subject:string; body:string } | null>(null);
   const [replace,setReplace] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const subjectRef = useRef<HTMLInputElement | null>(null), bodyRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     const request = new AbortController(); controller.current = request;
     void api<{ hunterConfigured:boolean }>('/api/outreach/config',{ signal:request.signal }).then(result => { if (!request.signal.aborted) setConfigured(result.hunterConfigured); }).catch(() => {});
+    void api<{ configured:boolean }>('/api/ai/config',{ signal:request.signal }).then(result => { if (!request.signal.aborted) setAiConfigured(result.configured); }).catch(() => {});
     return () => request.abort();
   },[]);
   const draft = lead.outreachDraft, current = currentDraft(lead), generated = templateText(lead);
   async function action(name: string, input: Record<string, unknown> = {}) {
     if (busy || blocked || !controller.current) return;
-    const signal = controller.current.signal; onBusy(true); setError(null); setMessage(null);
+    const signal = controller.current.signal; onBusy(true); setError(null); setMessage(null); setSuggestion(null);
     try {
       const result = await api<{ lead:Lead }>('/api/outreach/' + lead.id + '/' + name,{ method:'POST',body:JSON.stringify({ expectedUpdatedAt:lead.updatedAt,...input }),signal });
       if (!signal.aborted) { setEdited(false); setReplace(false); onDirty(false); onSaved(result.lead); }
@@ -36,21 +40,42 @@ export function OutreachEditor({ lead, busy, blocked, onBusy, onSaved, onUncerta
     } catch (failure) { if (!signal.aborted) { setError(failure instanceof Error ? failure.message : 'Copy failed.'); if (failure instanceof ApiRequestError && failure.status === 409) onUncertain(); } }
     finally { if (!signal.aborted) onBusy(false); }
   }
-  const disabled = busy || blocked, enrichment = lead.contactEnrichment;
+  async function polish() {
+    if (busy || blocked || aiBusy || !aiConfigured || !current || !subjectRef.current || !bodyRef.current || !controller.current) return;
+    setAiBusy(true); onBusy(true); setError(null); setSuggestion(null);
+    try {
+      const result = await api<{ subject:string; body:string }>('/api/ai/' + lead.id + '/polish',{
+        method:'POST',signal:controller.current.signal,
+        body:JSON.stringify({ expectedUpdatedAt:lead.updatedAt,subject:subjectRef.current.value,body:bodyRef.current.value })
+      });
+      if (!controller.current.signal.aborted) setSuggestion(result);
+    } catch (failure) { if (!controller.current?.signal.aborted) setError(failure instanceof Error ? failure.message : 'AI polish is unavailable. Your draft is unchanged.'); }
+    finally { setAiBusy(false); onBusy(false); }
+  }
+  function useSuggestion() {
+    if (!suggestion || !subjectRef.current || !bodyRef.current) return;
+    subjectRef.current.value = suggestion.subject; bodyRef.current.value = suggestion.body;
+    setSuggestion(null); setEdited(true); onDirty(true); setMessage('AI wording placed in the editor. Review and save it manually. Nothing was sent.');
+  }
+  const disabled = busy || blocked || aiBusy, enrichment = lead.contactEnrichment;
   return <section className="audit-panel"><h2>Outreach draft</h2>
     <p className="muted">Review the evidence and every sentence before copying. Drafts are plain text; sending remains your manual action.</p>
     {!generated && <p>No current outreach opportunity assessment. Review website evidence and run an audit first.</p>}
     {draft && <>
       <p className={current ? 'muted' : 'row-warning'}>{current ? draft.edited ? 'User-edited draft' : 'Generated draft' : 'Stale / review required — saved text is preserved, but cannot be approved or copied.'} · {draft.approval === 'approved' && current ? 'Reviewed and approved' : 'Awaiting review'}</p>
       <p><strong>Reason to contact:</strong> {generated?.reason || 'Assessment unavailable; reaudit before using the draft.'}</p>
-      <form className="management-form" onSubmit={save} onChange={() => { setEdited(true); onDirty(true); setMessage(null); }}>
+      <form className="management-form" onSubmit={save} onChange={() => { setEdited(true); onDirty(true); setMessage(null); setSuggestion(null); }}>
         <fieldset disabled={disabled || !current}><legend className="sr-only">Editable outreach draft</legend>
-          <label className="notes-field">Subject<input name="subject" maxLength={draftLimits.subject} defaultValue={draft.subject} required /></label>
-          <div className="notes-field"><label htmlFor={'outreach-body-' + lead.id}>Message</label><textarea id={'outreach-body-' + lead.id} name="body" rows={10} maxLength={draftLimits.body} defaultValue={draft.body} required /></div>
+          <label className="notes-field">Subject<input ref={subjectRef} name="subject" maxLength={draftLimits.subject} defaultValue={draft.subject} required /></label>
+          <div className="notes-field"><label htmlFor={'outreach-body-' + lead.id}>Message</label><textarea ref={bodyRef} id={'outreach-body-' + lead.id} name="body" rows={10} maxLength={draftLimits.body} defaultValue={draft.body} required /></div>
           <label className="review-check"><input name="approve" type="checkbox" defaultChecked={draft.approval === 'approved'} />I reviewed the current evidence and this draft for manual outreach.</label>
           <div className="management-actions"><button className="button" type="submit">Save draft / review</button><button className="text-button" type="reset" onClick={() => { setEdited(false); onDirty(false); }}>Discard draft edits</button></div>
         </fieldset>
       </form>
+      <div className="ai-assist"><button className="text-button" disabled={disabled || aiBusy || !current || !aiConfigured} onClick={() => void polish()}>{aiBusy ? 'Polishing…' : 'Polish with AI'}</button>
+        {!aiConfigured && <small>AI assist is disabled; the deterministic draft remains available.</small>}
+        {suggestion && <div className="ai-suggestion" role="status"><p><strong>AI-generated suggestion · not saved</strong></p><pre className="provenance-data">Subject: {suggestion.subject}{'\n\n'}{suggestion.body}</pre><button className="button" disabled={disabled} onClick={useSuggestion}>Use suggestion in editor</button><button className="text-button" onClick={() => setSuggestion(null)}>Discard suggestion</button></div>}
+      </div>
       {!current && <details><summary>Preserved draft text</summary><pre className="provenance-data">Subject: {draft.subject}{'\n\n'}{draft.body}</pre></details>}
       <button className="text-button" disabled={disabled || edited || !current || draft.approval !== 'approved'} onClick={() => void copy()}>Copy reviewed draft</button>
     </>}

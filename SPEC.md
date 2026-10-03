@@ -83,6 +83,7 @@ Each lead should support, where available:
 - score
 - scoreReasons
 - outreachDraft
+- mockupCandidate (manual flag)
 - status
 - notes
 - followUpAt
@@ -249,7 +250,7 @@ Use Supabase for:
 ## 15. V1 exclusions
 Do not implement:
 - AI lead scoring
-- LLM-generated outreach
+- automatic LLM-generated outreach (the explicitly requested V1.0.3 optional polish suggestion is allowed only after a deterministic draft and manual action)
 - AI voice calls
 - automatic outreach
 - automatic email sending
@@ -262,6 +263,9 @@ Do not implement:
 - mobile app
 
 These are V2+ ideas.
+
+### V1.0.3 limited AI-assist exception
+The owner approved optional AgentRouter wording assistance for private V1. It may polish a current deterministic outreach draft, summarize stored audited evidence, or suggest one evidence-based angle for a POOR_WEBSITE lead. Every call requires an authenticated, provider-approved user click; a global durable 35/day UTC reservation cap applies. AI output is an untrusted suggestion only and cannot write classification, score, audit, contact status, or mockup-candidate state. The manual mockup flag never generates a site. Deterministic discovery, audit, scoring, drafting, editing, copying and tracking work with AI disabled. The exclusions above still prohibit automatic generation/sending, AI scoring/auditing and V2 features.
 
 ## 16. V1 success criteria
 V1 is successful when the user can:

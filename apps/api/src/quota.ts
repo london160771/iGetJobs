@@ -9,7 +9,7 @@ export function quotaStore(client: QuotaRpc): UsageStore {
     async load() {
       const result = await client.rpc('provider_usage_status');
       if (result.error || !result.data || typeof result.data !== 'object' || Array.isArray(result.data)) throw new RequestError(503,'Provider usage protection is unavailable.');
-      if (Object.entries(result.data).some(([provider,row]) => !['OSM','SERPAPI','HUNTER','GEOAPIFY'].includes(provider) || !row || typeof row !== 'object' || !('count' in row) || !Number.isInteger(row.count) || row.count < 0 || !('period' in row) || typeof row.period !== 'string' || !('lastCall' in row) || typeof row.lastCall !== 'number' || !Number.isFinite(row.lastCall))) throw new RequestError(503,'Provider usage protection is unavailable.');
+      if (Object.entries(result.data).some(([provider,row]) => !['OSM','SERPAPI','HUNTER','GEOAPIFY','AGENTROUTER'].includes(provider) || !row || typeof row !== 'object' || !('count' in row) || !Number.isInteger(row.count) || row.count < 0 || !('period' in row) || typeof row.period !== 'string' || !('lastCall' in row) || typeof row.lastCall !== 'number' || !Number.isFinite(row.lastCall))) throw new RequestError(503,'Provider usage protection is unavailable.');
       return result.data as Usage;
     },
     async save() { throw new RequestError(503,'Provider usage must be reserved atomically.'); },

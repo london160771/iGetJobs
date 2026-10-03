@@ -88,6 +88,6 @@ export function normalizeLead(record: SourceRecord, source: LeadSource): { lead:
     rating: Number.isFinite(rating) && rating >= 0 && rating <= 5 ? rating : null,
     reviewCount: Number.isInteger(reviews) && reviews >= 0 ? reviews : null,
     source, sourceId: record.sourceId, provenance: [provenance], audit: null, classification: null, score: null,
-    scoreReasons: [], outreachDraft: null, status: 'New', notes: '', followUpAt: null, createdAt: now, updatedAt: now
+    scoreReasons: [], outreachDraft: null, mockupCandidate: false, status: 'New', notes: '', followUpAt: null, createdAt: now, updatedAt: now
   } };
 }
