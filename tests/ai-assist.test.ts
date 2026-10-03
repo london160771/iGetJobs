@@ -107,7 +107,16 @@ test('AgentRouter transport is one bounded server request and never returns prov
   const contentParts = new AgentRouterGateway('fixture-secret','deepseek-v4-flash','https://agentrouter.org/v1',async () => new Response(JSON.stringify({ choices:[{ message:{ content:[{ type:'text',text:'Bounded ' },{ type:'text',text:'text response.' }] } }] }),{ status:200 }));
   assert.equal(await contentParts.complete('instructions','facts',150),'Bounded text response.');
   const unsafeParts = new AgentRouterGateway('fixture-secret','deepseek-v4-flash','https://agentrouter.org/v1',async () => new Response(JSON.stringify({ choices:[{ message:{ content:[{ type:'text',text:'Suggestion' },{ type:'image',url:'https://example.invalid/image' }] } }] }),{ status:200 }));
-  await assert.rejects(unsafeParts.complete('instructions','facts',150),error => error instanceof RequestError && /unusable response/.test(error.message));
+  const warn = console.warn, logs: string[] = [];
+  try {
+    console.warn = (...values: unknown[]) => logs.push(JSON.stringify(values));
+    await assert.rejects(unsafeParts.complete('instructions','facts',150),error => error instanceof RequestError && /unusable response/.test(error.message));
+    const malformed = new AgentRouterGateway('fixture-secret','deepseek-v4-flash','https://agentrouter.org/v1',async () => new Response(JSON.stringify({ provider_detail:'PRIVATE_OUTPUT_MARKER' }),{ status:200,headers:{'Content-Type':'application/json'} }));
+    await assert.rejects(malformed.complete('private prompt marker','private lead marker',150),RequestError);
+  } finally { console.warn = warn; }
+  assert.match(logs.join(' '),/invalid-content/);
+  assert.match(logs.join(' '),/invalid-envelope/);
+  assert.doesNotMatch(logs.join(' '),/PRIVATE_OUTPUT_MARKER|private prompt marker|private lead marker|fixture-secret/);
   const failed = new AgentRouterGateway('fixture-secret','deepseek-v4-flash','https://agentrouter.org/v1',async () => new Response('fixture-private-provider-detail',{ status:500 }));
   await assert.rejects(failed.complete('instructions','facts',150),error => error instanceof RequestError && !error.message.includes('fixture-private-provider-detail'));
 });

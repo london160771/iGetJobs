@@ -83,6 +83,9 @@ export class AgentRouterGateway implements AiGateway {
     if (!response.ok) throw new RequestError(response.status === 429 ? 429 : 503,
       response.status === 429 ? 'AI provider budget is unavailable right now. Your current work is unchanged.' : 'AI is unavailable right now. Your current work is unchanged.');
     let raw = '';
+    let responseFormat = 'invalid-json';
+    const mimeType = response.headers.get('content-type')?.split(';',1)[0]?.trim().toLowerCase();
+    const safeMimeType = mimeType && /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(mimeType) ? mimeType : 'unknown';
     try {
       const reader = response.body?.getReader();
       if (!reader) throw new Error();
@@ -90,23 +93,31 @@ export class AgentRouterGateway implements AiGateway {
       for (;;) {
         const chunk = await reader.read(); if (chunk.done) break;
         raw += decoder.decode(chunk.value,{ stream:true });
-        if (raw.length > 16000) { await reader.cancel(); throw new Error(); }
+        if (raw.length > 16000) { responseFormat = 'response-too-large'; await reader.cancel(); throw new Error(); }
       }
       raw += decoder.decode();
       const value: unknown = JSON.parse(raw);
+      responseFormat = 'invalid-envelope';
       if (!value || typeof value !== 'object' || !('choices' in value) || !Array.isArray(value.choices)
         || value.choices.length !== 1 || !value.choices[0]?.message) throw new Error();
       const content: unknown = value.choices[0].message.content;
-      if (typeof content === 'string') return content;
+      if (typeof content === 'string') { responseFormat = 'text'; return content; }
       // Some OpenAI-compatible gateways encode text as content parts. Accept only
       // a small, unambiguous text-only form; never use reasoning or non-text parts.
       if (Array.isArray(content) && content.length > 0 && content.length <= 8
         && content.every(part => part && typeof part === 'object' && !Array.isArray(part)
           && 'type' in part && part.type === 'text' && 'text' in part && typeof part.text === 'string')) {
+        responseFormat = 'text-parts';
         return content.map(part => (part as { text: string }).text).join('');
       }
+      responseFormat = 'invalid-content';
       throw new Error();
-    } catch { throw new RequestError(502,'AI returned an unusable response. Your current work is unchanged.'); }
+    } catch {
+      // Log only bounded structural metadata. Never log credentials, prompts,
+      // provider output, lead evidence, or raw response bodies.
+      console.warn('[AgentRouter] completion response rejected', { responseFormat, safeMimeType, bytes:raw.length });
+      throw new RequestError(502,'AI returned an unusable response. Your current work is unchanged.');
+    }
   }
 }
 
