@@ -229,3 +229,9 @@ summary:focus-visible { outline: 3px solid #157568; outline-offset: 4px; }
   .dashboard-counts, .management-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 480px) { .management-fields { grid-template-columns: minmax(0,1fr); } .count-card { padding: 16px; } .sort-control { align-items: stretch; flex-direction: column; } }
+
+/* iOS Safari zooms focused form controls below 16px. Match the mobile drawer
+   breakpoint, including short landscape, without changing desktop type sizes. */
+@media (max-width: 760px), (max-width: 960px) and (max-height: 500px) {
+  #root :is(input, select, textarea) { font-size: 16px; }
+}

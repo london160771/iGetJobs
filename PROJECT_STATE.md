@@ -8,6 +8,12 @@ The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure w
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
 
+## V1.0.1 mobile form-focus bugfix — 2026-10-03
+
+- A mobile-only CSS rule gives every `input`, `select` and `textarea` under the app root a computed font size of 16px at the existing mobile/short-landscape breakpoints. It covers Login, Search/CSV and result choices, Leads filters/sorting, Lead Detail audit and management fields, Notes, and Outreach subject/message. Normal desktop/tablet typography and the browser's user zoom remain unchanged; no restrictive viewport settings were added.
+- Local browser verification at 320×740, 390×844 and 844×390 found 16px Login controls and no document overflow; 1280×720 retained the prior 13.6px Login size. The shared CSS selector covers the other editable controls listed above. This was checked in a Chromium-based browser, not a physical iPhone/Safari session.
+- Checks pass: 95/95 tests, zero-warning lint, typecheck and production build. The existing ~501KB vendor-chunk advisory remains non-blocking. This patch changes only frontend CSS and this state record; no API, data, auth, provider, quota, outreach or V2 behavior changes.
+
 ## V1 freeze — 2026-10-03
 
 - Final read-only review: **PASS** at `48645b2f289718c7a5e28d4d847e69564446555b`. No blocker, high, or medium finding prevents private personal use. The remaining account-creation setting was an operational verification gap; the owner now confirms Supabase email signup is disabled. This dashboard setting is owner-confirmed, not independently read from Supabase in the freeze run.
