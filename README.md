@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Private personal V1. Phases 0–4 approved; Phase 5 verification complete and ready for final read-only review.** [Frontend](https://igetjobs.vercel.app) and [API](https://igetjobs-api.onrender.com) are live. Geoapify replaces active OSM/Nominatim/Overpass discovery by user approval. New leads remain unclassified and unscored until an audit completes. No V2 work.
+**Private personal V1 complete and frozen on 2026-10-03; final review PASS.** [Frontend](https://igetjobs.vercel.app) and [API](https://igetjobs-api.onrender.com) are live. Geoapify replaces active OSM/Nominatim/Overpass discovery by user approval. New leads remain unclassified and unscored until an audit completes. No V2 work.
 
 ## Local setup
 
@@ -278,9 +278,9 @@ scripts/             Safe live Supabase and Phases 1–4 verification
 tests/               Foundation, discovery, audit/security, management/outreach and SQL RLS tests
 ```
 
-Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet retains fixed navigation/header with one keyboard-focusable content scroller. Mobile keeps the same hidden off-canvas sidebar, never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains/restores focus and locks background scrolling. On short screens the open drawer alone may scroll to keep all items/footer accessible. The earlier Phase 5 deployment passed its Geoapify smoke gate; final-review corrections require fresh verification before completion. No V2 work.
+Routes: `/`, `/search`, `/leads`, `/leads/:leadId`, `/outreach`, `/settings`, `/login`, and not-found. Desktop/tablet retains fixed navigation/header with one keyboard-focusable content scroller. Mobile keeps the same hidden off-canvas sidebar, never horizontal navigation. The drawer closes on close/backdrop/navigation/Escape, contains/restores focus and locks background scrolling. On short screens the open drawer alone may scroll to keep all items/footer accessible. Phase 5 deployment and final-review corrections passed verification. No V2 work.
 
-Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish approved work with checks, state update, separate commit/push, and review. React, Node.js, Supabase, free tiers. Hunter is explicit fallback only. No Next.js, MongoDB, AI, automatic outreach, paid dependency, or V2 features. Stop for final V1 review after Phase 5 deployment verification.
+Read SPEC.md, DESIGN.md, AGENTS.md, PLAN.md, and PROJECT_STATE.md. Finish approved work with checks, state update, separate commit/push, and review. React, Node.js, Supabase, free tiers. Hunter is explicit fallback only. No Next.js, MongoDB, AI, automatic outreach, paid dependency, or V2 features. V1 is frozen; do not start V2 without a separate instruction.
 
 ## Final-review corrections (private V1)
 
@@ -300,4 +300,4 @@ The resumed 2026-10-03 check also confirms durable Geoapify quota reservations/c
 
 Approved production browser evidence: Bath/GB dentists via Geoapify shows 22 businesses; a reviewed lead saves/reloads and audits as ACCEPTABLE_WEBSITE, score 11, with persisted evidence/reasons. Cached repeat detects its duplicate with zero added quota. Oxford/GB dentists via SerpAPI shows 20 businesses and a reviewed save succeeds; cached responses consume no further reservation. Malformed CSV feedback, clean protocol-relative provenance and CSV save/reload pass. Every generated provider/browser/core verification record is confirmed removed. Provider usage records are never reset as cleanup.
 
-After the owner removed temporary A approval and redeployed Render, both disposable accounts receive 403 on provider-consuming routes, anonymous requests receive 401, and recorded quota periods/counts survive the actual API restart. Denied calls reserve no allowance. Successful approved-user tests did not require the operator password or session. Final status: PASS for private personal V1 verification; await final read-only review and do not start V2.
+After the owner removed temporary A approval and redeployed Render, both disposable accounts receive 403 on provider-consuming routes, anonymous requests receive 401, and recorded quota periods/counts survive the actual API restart. Denied calls reserve no allowance. Successful approved-user tests did not require the operator password or session. The owner subsequently confirmed Supabase email signup is disabled while existing operator login remains available. Final read-only review: PASS. V1 was frozen on 2026-10-03; do not start V2.

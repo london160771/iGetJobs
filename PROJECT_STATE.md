@@ -2,11 +2,18 @@
 
 ## Current status
 
-Phases 0–4 are approved and complete, including reviewed fixes. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Hobby/Render Free (one Node process), with existing Supabase for durable quotas. **PASS: Phase 5 verification is complete, including all final V1 review corrections. The owner confirms the permanent operator UUID is configured privately on Render. Successful provider checks used explicitly temporary approval for disposable test account A; that approval is now removed, both test accounts are blocked again, and quotas survived the redeploy. All verification leads are removed. V1 is ready for final read-only review. Stop before V2; final approval remains with the user.**
+**V1 COMPLETE · V1 FROZEN — 2026-10-03. Final read-only V1 review: PASS.** Phases 0–5 are complete. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Hobby/Render Free (one Node process), with existing Supabase for durable quotas. The owner confirms Supabase email signup is disabled, existing operator login remains available, and new public email/password account creation is blocked. The permanent operator UUID remains privately approved on Render; temporary test-account approval was removed, both test accounts are blocked from provider consumption, and quotas survived the redeploy. All verification leads were removed. Preserve this V1 baseline; do not start V2 without a separate instruction.
 
 The approved Phase 4 base is be632eef99a603f5a80cc4afd527636d832d2bf4. Failure wording matches recorded evidence and no-op draft saves reset dirty state. The latest user instruction replaces production local quota files with Supabase reservations because Render Free storage is ephemeral. The earlier file-persistence deployment notes are historical; current production requirements are below.
 
 Branch: main. Repository: https://github.com/london160771/iGetJobs.
+
+## V1 freeze — 2026-10-03
+
+- Final read-only review: **PASS** at `48645b2f289718c7a5e28d4d847e69564446555b`. No blocker, high, or medium finding prevents private personal use. The remaining account-creation setting was an operational verification gap; the owner now confirms Supabase email signup is disabled. This dashboard setting is owner-confirmed, not independently read from Supabase in the freeze run.
+- Freeze checks: **95/95 tests**, lint with zero warnings, typecheck, production build, and secret scan passed. The first build attempt failed because the sandbox denied Vite config-loader filesystem access; the identical build passed with normal filesystem access. The existing ~501KB vendor-chunk advisory is non-blocking. The secret scan found no values in 121 publishable files, Git history, or 12 web outputs.
+- Production workflow, provider authorization, RLS/isolation, quotas, responsive behavior, accessibility, and disposable-record cleanup remain verified in the Phase 5 evidence below. No application code, migrations, dependencies, hosting, or provider configuration changed for the freeze.
+- Known V1 limits remain: free-host cold starts and process-local cache/preview loss; bounded 2,000-lead snapshots; conservative provider coverage, quotas, and deduplication; static HTML audits cannot verify rendered behavior; Hunter remains disabled pending a verified Free-plan credential; outreach remains manual; review Vercel Hobby eligibility before commercial or wider public use. Historical OSM code/data support stays inactive in discovery.
 
 ## Final V1 review corrections — 2026-10-03
 
