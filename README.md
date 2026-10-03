@@ -2,7 +2,7 @@
 
 Personal workspace for finding local businesses that need website work.
 
-**Private personal V1 complete and frozen on 2026-10-03; final review PASS.** [Frontend](https://igetjobs.vercel.app) and [API](https://igetjobs-api.onrender.com) are live. Geoapify replaces active OSM/Nominatim/Overpass discovery by user approval. New leads remain unclassified and unscored until an audit completes. No V2 work.
+**Private personal V1 complete and frozen on 2026-10-03; final review PASS.** The v1.0.2 discovery-preview hardening release requires explicit result selection and shows source-only contact/website signals. [Frontend](https://igetjobs.vercel.app) and [API](https://igetjobs-api.onrender.com) are live. Geoapify replaces active OSM/Nominatim/Overpass discovery by user approval. New leads remain unclassified and unscored until an audit completes. No V2 work.
 
 ## Local setup
 
