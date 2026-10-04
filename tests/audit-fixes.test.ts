@@ -10,12 +10,13 @@ import { resolveWebsiteEvidence } from '../apps/api/src/website-safety.js';
 import { auditLead } from '../apps/api/src/audit/engine.js';
 import { analysisLimits, hasContactText, inspectHtml, inspectHtmlIsolated } from '../apps/api/src/audit/html.js';
 import { defaultScoring } from '../apps/api/src/audit/policy.js';
+import { AuditManualReviewError } from '../apps/api/src/audit/manual-review.js';
 import type { WebsiteFetchResult } from '../apps/api/src/audit/fetcher.js';
 
 const response = (body: string): WebsiteFetchResult => ({ url: 'https://clinic.com/', body, bytes: Buffer.byteLength(body), status: 200, headers: { 'content-type': 'text/html' }, durationMs: 100, redirects: 0 });
 const fixtureLead = () => normalizeLead({ businessName: 'Audit fixture', sourceId: 'fixture', metadata: {} }, 'CSV').lead;
 const invalid = (error: unknown) => error instanceof RequestError && error.status === 409;
-const limited = (error: unknown) => error instanceof RequestError && error.status === 422;
+const limited = (error: unknown): error is AuditManualReviewError => error instanceof AuditManualReviewError;
 
 test('contact inspection stays bounded on reproduced long text and finds a later normal email', () => {
   for (const text of ['a'.repeat(40000), 'a'.repeat(20000) + '@' + 'b'.repeat(20000), 'a'.repeat(64000)]) {
@@ -29,15 +30,22 @@ test('contact inspection stays bounded on reproduced long text and finds a later
   for (const text of ['not-an-email', 'public@clinic', 'public@@clinic.com', 'public@-clinic.com', '12345']) assert.equal(hasContactText(text), false);
 });
 
-test('HTML, text, tree depth and node limits decline rather than score a partial page', async () => {
+test('HTML, text, tree depth and node limits report distinct manual-review reasons rather than score partial pages', async () => {
   const oversized = '<body>' + 'x'.repeat(analysisLimits.htmlBytes) + '</body>';
   const tooMuchText = '<body>' + 'x'.repeat(analysisLimits.textChars + 1) + '</body>';
   const deep = '<div>'.repeat(analysisLimits.depth + 1) + 'text' + '</div>'.repeat(analysisLimits.depth + 1);
   const manyNodes = '<span>x</span>'.repeat(analysisLimits.nodes);
-  for (const html of [oversized, tooMuchText, deep, manyNodes]) assert.throws(() => inspectHtml(response(html), defaultScoring), limited);
+  const cases = [[oversized, 'HTML_TOO_LARGE'], [tooMuchText, 'TEXT_TOO_LARGE'], [deep, 'DOM_TOO_DEEP'], [manyNodes, 'DOM_TOO_MANY_NODES']] as const;
+  for (const [html, reason] of cases) assert.throws(() => inspectHtml(response(html), defaultScoring), error => limited(error) && error.reason === reason);
+  let sizeFailure: unknown;
+  try { inspectHtml(response(oversized), defaultScoring); } catch (error) { sizeFailure = error; }
+  assert.ok(limited(sizeFailure));
+  assert.equal(sizeFailure.detail?.measuredHtmlBytes, Buffer.byteLength(oversized));
+  assert.equal(sizeFailure.detail?.htmlByteLimit, analysisLimits.htmlBytes);
   const lead = { ...fixtureLead(), website: 'https://clinic.com/' };
-  await assert.rejects(auditLead(lead, undefined, defaultScoring, async () => response(oversized)), limited);
+  await assert.rejects(auditLead(lead, undefined, defaultScoring, async () => response(oversized)), error => limited(error) && error.reason === 'HTML_TOO_LARGE');
   assert.equal(lead.audit, null); assert.equal(lead.classification, null); assert.equal(lead.score, null);
+  assert.equal(lead.auditAttemptStatus, 'NOT_AUDITED');
 });
 
 test('production HTML inspection yields the API event loop and equals deterministic bounded inspection', async () => {
@@ -47,14 +55,14 @@ test('production HTML inspection yields the API event loop and equals determinis
   await new Promise(resolve => setImmediate(resolve));
   assert.ok(performance.now() - start < 500, 'Worker startup must not block the API event loop.');
   assert.deepEqual(await analysis, inspectHtml(result, defaultScoring));
-  await assert.rejects(inspectHtmlIsolated(response('<body>' + '<div>'.repeat(80)), defaultScoring), limited);
+  await assert.rejects(inspectHtmlIsolated(response('<body>' + '<div>'.repeat(80)), defaultScoring), error => limited(error) && error.reason === 'DOM_TOO_DEEP');
 });
 
 test('worker deadline terminates incomplete analysis without inventing a quality result', async context => {
   context.mock.timers.enable({ apis: ['setTimeout'] });
   const analysis = inspectHtmlIsolated(response('<html><body>Fixture</body></html>'), defaultScoring);
   context.mock.timers.tick(analysisLimits.startupMs);
-  await assert.rejects(analysis, limited);
+  await assert.rejects(analysis, error => limited(error) && error.reason === 'ANALYSIS_TIMEOUT' && error.detail?.stage === 'worker_startup');
 });
 
 test('inspection deadline also terminates a ready worker that stops responding', async context => {
@@ -65,7 +73,7 @@ test('inspection deadline also terminates a ready worker that stops responding',
   // analysis. The execution deadline must work independently of startup.
   context.mock.method(Worker.prototype, 'postMessage', () => workerReady());
   const analysis = inspectHtmlIsolated(response('<html><body>Fixture</body></html>'), defaultScoring);
-  const rejection = assert.rejects(analysis, limited), deadline = new AbortController();
+  const rejection = assert.rejects(analysis, error => limited(error) && error.reason === 'ANALYSIS_TIMEOUT'), deadline = new AbortController();
   try {
     // A real timer and the analysis rejection bound readiness even while ordinary
     // setTimeout is mocked. An errored/exited worker cannot leave an infinite wait.
@@ -90,12 +98,12 @@ test('worker success/error/timeout settle only after termination and repeated in
     assert.equal(live.size, 0);
   }
   context.mock.method(Worker.prototype, 'postMessage', function (this: Worker) { live.add(this); this.emit('error', new Error('Fixture startup/processing error')); });
-  await assert.rejects(inspectHtmlIsolated(response('<body>Fixture</body>'), defaultScoring), limited);
+  await assert.rejects(inspectHtmlIsolated(response('<body>Fixture</body>'), defaultScoring), error => limited(error) && error.reason === 'OTHER_UNVERIFIED');
   assert.equal(live.size, 0);
   context.mock.timers.enable({ apis: ['setTimeout'] });
   const timeout = inspectHtmlIsolated(response('<body>Fixture</body>'), defaultScoring);
   context.mock.timers.tick(analysisLimits.startupMs);
-  await assert.rejects(timeout, limited);
+  await assert.rejects(timeout, error => limited(error) && error.reason === 'ANALYSIS_TIMEOUT');
   assert.equal(live.size, 0);
   assert.equal(analysisLimits.startupMs, 5000); assert.equal(analysisLimits.workerMs, 750);
 });

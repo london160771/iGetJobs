@@ -5,6 +5,18 @@ export * from './outreach.js';
 import type { LeadActivity } from './management.js';
 export type LeadSource = 'SERPAPI' | 'GEOAPIFY' | 'OSM' | 'CSV';
 export type LeadClassification = 'NO_WEBSITE' | 'POOR_WEBSITE' | 'ACCEPTABLE_WEBSITE';
+export const auditAttemptStatuses = ['NOT_AUDITED', 'COMPLETED', 'NEEDS_MANUAL_REVIEW'] as const;
+export type AuditAttemptStatus = typeof auditAttemptStatuses[number];
+export const auditAttemptReasons = ['HTML_TOO_LARGE', 'TEXT_TOO_LARGE', 'DOM_TOO_MANY_NODES', 'DOM_TOO_DEEP', 'ANALYSIS_TIMEOUT', 'UNSUPPORTED_CONTENT', 'ACCESS_RESTRICTED', 'OTHER_UNVERIFIED'] as const;
+export type AuditAttemptReason = typeof auditAttemptReasons[number];
+export interface AuditAttemptDetail {
+  measuredHtmlBytes?: number; htmlByteLimit?: number;
+  measuredTextLength?: number; textCharLimit?: number;
+  measuredNodes?: number; nodeLimit?: number;
+  measuredDepth?: number; depthLimit?: number;
+  stage?: 'fetch' | 'worker_startup' | 'analysis'; timeLimitMs?: number;
+  httpStatus?: number;
+}
 export type LeadStatus = 'New' | 'Qualified' | 'Contacted' | 'Replied' | 'Call Booked' | 'Closed' | 'Lost';
 export type LeadPriority = 'High' | 'Medium' | 'Low';
 export type IsoDateTime = string;
@@ -51,6 +63,32 @@ export interface ScoringConfig {
 }
 export function leadPriority(score: number | null, config?: ScoringConfig): LeadPriority | null {
   return score === null ? null : score >= (config?.highPriority ?? 70) ? 'High' : score >= (config?.mediumPriority ?? 40) ? 'Medium' : 'Low';
+}
+export function auditAttemptReasonLabel(reason: AuditAttemptReason, detail?: AuditAttemptDetail | null): string {
+  const number = (value: number | undefined) => value === undefined ? 'the configured' : value.toLocaleString();
+  const byteSize = (value: number | undefined) => value === undefined ? 'configured size' : value % 1024 === 0 ? `${value / 1024} KB` : `${value.toLocaleString()} bytes`;
+  switch (reason) {
+    case 'HTML_TOO_LARGE': return `${detail?.stage === 'fetch' ? 'Website HTML response' : 'Static HTML'} exceeded the ${byteSize(detail?.htmlByteLimit)} ${detail?.stage === 'fetch' ? 'fetch' : 'analysis'} limit${detail?.measuredHtmlBytes !== undefined ? ` (${detail.measuredHtmlBytes.toLocaleString()} bytes measured)` : ''}; quality remains unverified.`;
+    case 'TEXT_TOO_LARGE': return `Visible text exceeded the ${number(detail?.textCharLimit)} character analysis limit${detail?.measuredTextLength !== undefined ? ` (${detail.measuredTextLength.toLocaleString()} measured)` : ''}; quality remains unverified.`;
+    case 'DOM_TOO_MANY_NODES': return `Page DOM exceeded the ${number(detail?.nodeLimit)} node limit${detail?.measuredNodes !== undefined ? ` (at least ${detail.measuredNodes.toLocaleString()} measured)` : ''}; quality remains unverified.`;
+    case 'DOM_TOO_DEEP': return `Page DOM exceeded the ${number(detail?.depthLimit)} level nesting limit${detail?.measuredDepth !== undefined ? ` (at least ${detail.measuredDepth.toLocaleString()} measured)` : ''}; quality remains unverified.`;
+    case 'ANALYSIS_TIMEOUT': return 'Static HTML analysis exceeded the bounded processing time; quality remains unverified.';
+    case 'UNSUPPORTED_CONTENT': return 'The website response did not contain supported HTML; quality remains unverified.';
+    case 'ACCESS_RESTRICTED': return `The website restricted inspection${detail?.httpStatus ? ` (HTTP ${detail.httpStatus})` : ''}; quality remains unverified.`;
+    case 'OTHER_UNVERIFIED': return 'Automatic inspection stopped for a safety or reliability reason; quality remains unverified.';
+  }
+}
+export function auditAttemptShortReason(reason: AuditAttemptReason): string {
+  switch (reason) {
+    case 'HTML_TOO_LARGE': return 'HTML limit exceeded';
+    case 'TEXT_TOO_LARGE': return 'Text limit exceeded';
+    case 'DOM_TOO_MANY_NODES': return 'DOM node limit exceeded';
+    case 'DOM_TOO_DEEP': return 'DOM nesting limit exceeded';
+    case 'ANALYSIS_TIMEOUT': return 'Analysis timed out';
+    case 'UNSUPPORTED_CONTENT': return 'Unsupported content';
+    case 'ACCESS_RESTRICTED': return 'Access restricted';
+    case 'OTHER_UNVERIFIED': return 'Automatic inspection stopped';
+  }
 }
 export interface AuditDetail { lead: Lead; resolution: WebsiteResolution; scoring: ScoringConfig }
 
@@ -105,6 +143,10 @@ export interface Lead extends LeadProvenance {
   /** Preserve additional source metadata when records are merged in Phase 1. */
   provenance: LeadProvenance[];
   audit: WebsiteAudit | null;
+  auditAttemptStatus: AuditAttemptStatus;
+  auditAttemptReason: AuditAttemptReason | null;
+  auditAttemptedAt: IsoDateTime | null;
+  auditAttemptDetail: AuditAttemptDetail | null;
   /** Null until deterministic classification runs in Phase 2. */
   classification: LeadClassification | null;
   /** Null until scored; populated scores must be within 0–100. */
@@ -112,6 +154,8 @@ export interface Lead extends LeadProvenance {
   scoreReasons: ScoreReason[];
   outreachDraft: OutreachDraft | null;
   contactEnrichment?: ContactEnrichment | null;
+  /** User-controlled reminder that a future visual concept may be useful. */
+  mockupCandidate: boolean;
   status: LeadStatus;
   notes: string;
   followUpAt: IsoDateTime | null;

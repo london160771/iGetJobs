@@ -2,7 +2,24 @@
 
 ## Current status
 
-**V1 COMPLETE · V1 FROZEN — 2026-10-03. Final read-only V1 review: PASS.** The focused v1.0.2 discovery-preview hardening update passed live verification. Phases 0–5 are complete. The frontend https://igetjobs.vercel.app and API https://igetjobs-api.onrender.com are live on Vercel Hobby/Render Free (one Node process), with existing Supabase for durable quotas. The owner confirms Supabase email signup is disabled, existing operator login remains available, and new public email/password account creation is blocked. The permanent operator UUID remains privately approved on Render. Disposable account A was temporarily approved only for the v1.0.2 live checks, then the owner removed it and redeployed. A fresh check confirms A is blocked from both providers without quota consumption. All previous verification leads were removed, and v1.0.2 preview checks created none. Preserve this V1 baseline; do not start V2 without a separate instruction.
+**V1.0.2 baseline: COMPLETE and FROZEN — 2026-10-03; final read-only review: PASS.** The clean V1.0.3 release candidate is based on tag `v1.0.2` and contains only manual audit-review and manual mockup-candidate hardening. No AgentRouter runtime, UI, tests, environment requirements, or quota calls are included. Production remains https://igetjobs.vercel.app and https://igetjobs-api.onrender.com.
+
+## V1.0.3 clean release — candidate verification (2026-10-04)
+
+Focused V1 change only. Deterministic final classifications and score policy are unchanged; no V2 work.
+
+- Added dedicated persisted `audit_attempt_status`, `audit_attempt_reason`, `audit_attempted_at`, and bounded `audit_attempt_detail` fields in migration `202610040008_audit_manual_review.sql`. Existing assessments backfill to `COMPLETED`; untouched leads remain `NOT_AUDITED`. The existing RLS policies remain in force; the owner-scoped security-invoker snapshot exposes only compact status/reason/time fields.
+- Bounded/unverified outcomes persist as `NEEDS_MANUAL_REVIEW` without HTML or stack traces. Supported reasons: HTML_TOO_LARGE, TEXT_TOO_LARGE, DOM_TOO_MANY_NODES, DOM_TOO_DEEP, ANALYSIS_TIMEOUT, UNSUPPORTED_CONTENT, ACCESS_RESTRICTED, and OTHER_UNVERIFIED. Safe measurements/limits and an HTTP status may be recorded. Existing HTML/content/DOM/worker/time/resource bounds and deterministic classifications are unchanged.
+- A manual-review retry leaves a prior valid audit/classification/score intact and clearly marks it as a previous completed assessment in Lead Detail. With no previous successful assessment, assessment fields stay null. Later successful retry changes the attempt to `COMPLETED`; edits to assessment inputs atomically clear both attempt and assessment data. Notes, mockup flag and pipeline status remain available without modifying scoring evidence.
+- Leads now have a distinct Audit status filter and a compact Manual review row marker/reason. Classification remains limited to the three final classifications plus Not audited; its Not audited option excludes leads with manual-review attempts.
+- The manual Mockup candidate checkbox is a boolean saved through the existing owner-scoped lead update path. It does not change the assessment or outreach draft and has no automatic suggestion/generation behavior.
+- Local clean-branch verification: 100/100 tests, lint, typecheck, production build, and secret scan pass. Secret scan checked 133 publishable files, Git history and 13 built frontend outputs. The existing ~501KB vendor chunk warning remains.
+- Production schema inspection shows `mockup_candidate` and all four audit-attempt fields already exist. The application migration ledger schema `supabase_migrations.schema_migrations` is absent; the migration list in this release therefore retains `202610030007_ai_assist.sql` and `202610040008_audit_manual_review.sql` byte-identically to match the manually applied production DDL. The AgentRouter quota row/function support in migration 007 is inert historical compatibility; runtime code has no AgentRouter route or dependency.
+- The unverified AgentRouter experiment from prior `main` is not part of this release and is not being released. No AgentRouter key or configuration is required.
+- The previously verified Midtown Dental audit result remains `NEEDS_MANUAL_REVIEW / HTML_TOO_LARGE`, with 242,745 measured bytes against the 128 KB analysis limit. Its classification and score remain null. The production state was confirmed before building this clean branch; final clean-release deployment verification is still pending.
+- No v1.0.3 tag has been created. Tag only after clean-branch checks and deployment verification pass. Do not release the AgentRouter candidate or rewrite `main`; reconcile `main` to the clean release tree with a normal merge commit.
+
+Stop before V2.
 
 ## V1.0.2 discovery-preview hardening — 2026-10-03
 

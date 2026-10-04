@@ -2,12 +2,13 @@ import { load } from 'cheerio';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
 import type { AuditCheck, ScoringConfig } from '@igetjobs/shared';
 import type { WebsiteFetchResult } from './fetcher.js';
-import { RequestError } from '../discovery/errors.js';
+import { AuditManualReviewError } from './manual-review.js';
 
 export const analysisLimits = { htmlBytes: 128 * 1024, textChars: 64 * 1024, nodes: 4000, depth: 64, startupMs: 5000, workerMs: 750, tokenChars: 254 };
-const declined = () => new RequestError(422, 'Static HTML analysis exceeded safety limits; quality remains unverified. No score was changed.');
+const htmlTooLarge = (measuredHtmlBytes: number) => new AuditManualReviewError('HTML_TOO_LARGE', 'Static HTML exceeded the 128 KB analysis limit; quality remains unverified.', { measuredHtmlBytes, htmlByteLimit: analysisLimits.htmlBytes });
 function checkHtmlSize(body: string) {
-  if (body.length > analysisLimits.htmlBytes || Buffer.byteLength(body) > analysisLimits.htmlBytes) throw declined();
+  const measuredHtmlBytes = Buffer.byteLength(body);
+  if (body.length > analysisLimits.htmlBytes || measuredHtmlBytes > analysisLimits.htmlBytes) throw htmlTooLarge(measuredHtmlBytes);
 }
 
 // Each candidate has a fixed maximum length. No regex searches unbounded text.
@@ -22,7 +23,7 @@ function emailToken(input: string): boolean {
     && /^[a-z]{2,63}$/i.test(labels.at(-1)!);
 }
 export function hasContactText(text: string): boolean {
-  if (text.length > analysisLimits.textChars) throw declined();
+  if (text.length > analysisLimits.textChars) throw new AuditManualReviewError('TEXT_TOO_LARGE', 'Visible text exceeded the 64,000 character analysis limit; quality remains unverified.', { measuredTextLength: text.length, textCharLimit: analysisLimits.textChars });
   let start = 0, phoneDigits = 0, phoneChars = 0;
   for (let index = 0; index <= text.length; index++) {
     const char = text[index] || '';
@@ -47,7 +48,8 @@ export function inspectHtml(result: WebsiteFetchResult, config: ScoringConfig): 
   const pending = $.root()[0]!.children.map(node => ({ node, depth: 1 })); let nodes = 0;
   while (pending.length) {
     const { node, depth } = pending.pop()!;
-    if (++nodes > analysisLimits.nodes || depth > analysisLimits.depth) throw declined();
+    if (++nodes > analysisLimits.nodes) throw new AuditManualReviewError('DOM_TOO_MANY_NODES', 'Page DOM exceeded 4,000 nodes; quality remains unverified.', { measuredNodes: nodes, nodeLimit: analysisLimits.nodes });
+    if (depth > analysisLimits.depth) throw new AuditManualReviewError('DOM_TOO_DEEP', 'Page DOM exceeded 64 levels; quality remains unverified.', { measuredDepth: depth, depthLimit: analysisLimits.depth });
     if ('children' in node) for (const child of node.children) pending.push({ node: child, depth: depth + 1 });
   }
   const title = $('title').text().trim();
@@ -56,7 +58,7 @@ export function inspectHtml(result: WebsiteFetchResult, config: ScoringConfig): 
   $('script,style,noscript,template,[hidden],[aria-hidden="true"]').remove();
   $('[style]').each((_index, node) => { if (/(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/i.test($(node).attr('style') || '')) $(node).remove(); });
   const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
-  if (visibleText.length > analysisLimits.textChars) throw declined();
+  if (visibleText.length > analysisLimits.textChars) throw new AuditManualReviewError('TEXT_TOO_LARGE', 'Visible text exceeded the 64,000 character analysis limit; quality remains unverified.', { measuredTextLength: visibleText.length, textCharLimit: analysisLimits.textChars });
   const anchors = $('a[href]').toArray();
   const contact = anchors.some(node => /^(?:mailto:|tel:)/i.test($(node).attr('href') || '')) || hasContactText(visibleText);
   const ctas = $('a[href],button,input[type="submit"]').toArray().filter(node => /\b(?:contact|book|call|appointment|quote|enquir(?:e|y)|inquir(?:e|y)|reserve|consult|schedule|get started)\b/i.test($(node).text() || $(node).attr('value') || ''));
@@ -90,34 +92,40 @@ export function inspectHtmlIsolated(result: WebsiteFetchResult, config: ScoringC
     const typescript = source.pathname.endsWith('.ts');
     // tsx is already the development runner; production loads compiled JS directly.
     const entry = typescript ? `import('tsx/esm/api').then(({ register }) => { register(); return import(${JSON.stringify(source.href)}); });` : source;
-    const worker = new Worker(entry, { eval: typescript, execArgv: [], workerData: { htmlAudit: true, result, config }, resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 } });
+    let worker: Worker;
+    try { worker = new Worker(entry, { eval: typescript, execArgv: [], workerData: { htmlAudit: true, result, config }, resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 } }); }
+    catch { reject(new AuditManualReviewError('OTHER_UNVERIFIED', 'Automatic HTML inspection could not start; quality remains unverified.')); return; }
     let settled = false, ready = false;
     // Await termination before settling: callers/tests cannot overlap a leftover
     // worker with the next inspection. Every success/failure shares this cleanup.
-    const finish = (checks?: AuditCheck[]) => {
+    const finish = (outcome?: { checks?: AuditCheck[]; error?: AuditManualReviewError }) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      void worker.terminate().then(() => checks ? resolve(checks) : reject(declined()), () => reject(declined()));
+      void worker.terminate().then(() => outcome?.checks ? resolve(outcome.checks) : reject(outcome?.error || new AuditManualReviewError('OTHER_UNVERIFIED', 'Automatic HTML inspection could not complete; quality remains unverified.')), () => reject(outcome?.error || new AuditManualReviewError('OTHER_UNVERIFIED', 'Automatic HTML inspection could not complete; quality remains unverified.')));
     };
-    let timer = setTimeout(() => finish(), analysisLimits.startupMs);
-    worker.on('message', (message: { ready?: boolean; checks?: AuditCheck[] }) => {
+    let timer = setTimeout(() => finish({ error: new AuditManualReviewError('ANALYSIS_TIMEOUT', 'Static HTML analysis exceeded the bounded processing time; quality remains unverified.', { stage: 'worker_startup', timeLimitMs: analysisLimits.startupMs }) }), analysisLimits.startupMs);
+    worker.on('message', (message: { ready?: boolean; checks?: AuditCheck[]; failure?: { reason: import('@igetjobs/shared').AuditAttemptReason; message: string; detail: import('@igetjobs/shared').AuditAttemptDetail | null } }) => {
       if (settled) return;
       if (message.ready && !ready) {
         ready = true; clearTimeout(timer);
-        timer = setTimeout(() => finish(), analysisLimits.workerMs);
-        try { worker.postMessage('inspect'); } catch { finish(); }
+        timer = setTimeout(() => finish({ error: new AuditManualReviewError('ANALYSIS_TIMEOUT', 'Static HTML analysis exceeded the bounded processing time; quality remains unverified.', { stage: 'analysis', timeLimitMs: analysisLimits.workerMs }) }), analysisLimits.workerMs);
+        try { worker.postMessage('inspect'); } catch { finish({ error: new AuditManualReviewError('OTHER_UNVERIFIED', 'Automatic HTML inspection could not start; quality remains unverified.') }); }
         return;
       }
-      finish(message.checks);
+      if (message.failure) finish({ error: new AuditManualReviewError(message.failure.reason, message.failure.message, message.failure.detail) });
+      else finish(message.checks ? { checks: message.checks } : undefined);
     });
-    worker.once('error', () => finish());
-    worker.once('exit', () => finish());
+    worker.once('error', () => finish({ error: new AuditManualReviewError('OTHER_UNVERIFIED', 'Automatic HTML inspection stopped unexpectedly; quality remains unverified.') }));
+    worker.once('exit', code => { if (!settled) finish({ error: new AuditManualReviewError('OTHER_UNVERIFIED', code === 0 ? 'Automatic HTML inspection ended without a result; quality remains unverified.' : 'Automatic HTML inspection stopped unexpectedly; quality remains unverified.') }); });
   });
 }
 if (!isMainThread && workerData?.htmlAudit === true) {
   parentPort!.once('message', () => {
     try { parentPort!.postMessage({ checks: inspectHtml(workerData.result as WebsiteFetchResult, workerData.config as ScoringConfig) }); }
-    catch { parentPort!.postMessage({ declined: true }); }
+    catch (error) {
+      if (error instanceof AuditManualReviewError) parentPort!.postMessage({ failure: { reason: error.reason, message: error.message, detail: error.detail } });
+      else parentPort!.postMessage({ failure: { reason: 'OTHER_UNVERIFIED', message: 'Automatic HTML inspection stopped unexpectedly; quality remains unverified.', detail: null } });
+    }
   });
   parentPort!.postMessage({ ready: true });
 }

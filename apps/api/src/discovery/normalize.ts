@@ -87,7 +87,9 @@ export function normalizeLead(record: SourceRecord, source: LeadSource): { lead:
     email, socials: Object.fromEntries(Object.entries(record.socials || {}).map(([key, value]) => [key, websiteUrl(value)]).filter((entry): entry is [string, string] => Boolean(entry[1]))),
     rating: Number.isFinite(rating) && rating >= 0 && rating <= 5 ? rating : null,
     reviewCount: Number.isInteger(reviews) && reviews >= 0 ? reviews : null,
-    source, sourceId: record.sourceId, provenance: [provenance], audit: null, classification: null, score: null,
-    scoreReasons: [], outreachDraft: null, status: 'New', notes: '', followUpAt: null, createdAt: now, updatedAt: now
+    source, sourceId: record.sourceId, provenance: [provenance], audit: null,
+    auditAttemptStatus: 'NOT_AUDITED', auditAttemptReason: null, auditAttemptedAt: null, auditAttemptDetail: null,
+    classification: null, score: null,
+    scoreReasons: [], outreachDraft: null, mockupCandidate: false, status: 'New', notes: '', followUpAt: null, createdAt: now, updatedAt: now
   } };
 }

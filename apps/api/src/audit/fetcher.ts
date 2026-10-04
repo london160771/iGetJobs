@@ -6,7 +6,7 @@ import { validateWebsiteDestination, WebsiteDestinationError, type ValidatedWebs
 
 export const fetchLimits = { redirects: 3, requestMs: 8000, totalMs: 20000, bytes: 1024 * 1024 };
 export class WebsiteFetchError extends Error {
-  constructor(readonly kind: 'blocked' | 'dns' | 'network' | 'timeout' | 'too_large' | 'encoding' | 'redirect', message: string) { super(message); }
+  constructor(readonly kind: 'blocked' | 'dns' | 'network' | 'timeout' | 'too_large' | 'encoding' | 'redirect', message: string, readonly measuredBytes: number | null = null) { super(message); }
 }
 export interface WebsiteResponse { status: number; headers: IncomingHttpHeaders; body: string; bytes: number }
 export interface WebsiteFetchResult extends WebsiteResponse { url: string; durationMs: number; redirects: number }
@@ -35,11 +35,11 @@ export function readWebsiteResponse(response: IncomingMessage): Promise<WebsiteR
       response.destroy(); reject(new WebsiteFetchError('encoding', 'Compressed website response was declined.')); return;
     }
     const declared = Number(response.headers['content-length']);
-    if (Number.isFinite(declared) && declared > fetchLimits.bytes) { response.destroy(); reject(new WebsiteFetchError('too_large', 'Website response exceeds 1MB.')); return; }
+    if (Number.isFinite(declared) && declared > fetchLimits.bytes) { response.destroy(); reject(new WebsiteFetchError('too_large', 'Website response exceeds 1MB.', declared)); return; }
     const chunks: Buffer[] = []; let bytes = 0;
     response.on('data', (chunk: Buffer) => {
       bytes += chunk.length;
-      if (bytes > fetchLimits.bytes) { reject(new WebsiteFetchError('too_large', 'Website response exceeds 1MB.')); response.destroy(); return; }
+      if (bytes > fetchLimits.bytes) { reject(new WebsiteFetchError('too_large', 'Website response exceeds 1MB.', bytes)); response.destroy(); return; }
       chunks.push(chunk);
     });
     response.on('end', () => resolve({ status, headers: response.headers, body: Buffer.concat(chunks).toString('utf8'), bytes }));

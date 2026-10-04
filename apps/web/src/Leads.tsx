@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { classifications, followUpState, leadStatuses, type LeadPage } from '@igetjobs/shared';
+import { auditAttemptShortReason, auditAttemptStatuses, classifications, followUpState, leadStatuses, type LeadPage } from '@igetjobs/shared';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from './lib/api';
 import { EmptyState, PageHeader } from './components';
@@ -39,6 +39,7 @@ export function Leads() {
       <details open={hasFilters}><summary>Filter leads</summary><div className="management-fields">
         {select('niche', 'Niche', options?.niches || [])}{select('country', 'Country', options?.countries || [])}{select('city', 'City', options?.cities || [])}
         {select('classification', 'Classification', [...classifications, 'UNAUDITED'], value => value === 'UNAUDITED' ? 'Not audited' : value.replace(/_/g, ' '))}
+        {select('auditStatus', 'Audit status', auditAttemptStatuses, value => value === 'NOT_AUDITED' ? 'Not audited' : value === 'COMPLETED' ? 'Completed' : 'Needs manual review')}
         <label>Minimum score<input name="minScore" type="number" min="0" max="100" defaultValue={params.get('minScore') || ''} placeholder="0" /></label>
         <label>Maximum score<input name="maxScore" type="number" min="0" max="100" defaultValue={params.get('maxScore') || ''} placeholder="100" /></label>
         {select('priority', 'Priority', ['High', 'Medium', 'Low'])}{select('status', 'Pipeline status', leadStatuses)}{select('source', 'Source', ['GEOAPIFY', 'OSM', 'SERPAPI', 'CSV'], value => value === 'OSM' ? 'OSM (historical)' : value)}
@@ -55,7 +56,9 @@ export function Leads() {
         {data.leads.map(lead => <tr key={lead.id}>
           <td data-label="Business"><Link className="lead-business" to={'/leads/' + lead.id}>{lead.businessName}</Link>{lead.followUpAt && <small className={followUpState(lead.followUpAt, today) === 'Overdue' ? 'row-warning' : 'muted'}>{followUpState(lead.followUpAt, today)} · {lead.followUpAt.slice(0, 10)}</small>}</td>
           <td data-label="Niche">{lead.niche || '—'}</td><td data-label="Location">{[lead.city, lead.country].filter(Boolean).join(', ') || '—'}</td>
-          <td data-label="Classification">{lead.classification ? <span className={'tag classification-' + lead.classification.toLowerCase()}>{lead.classification.replace(/_/g, ' ')}</span> : <span className="muted">Not audited</span>}</td>
+          <td data-label="Classification"><div className="classification-cell">{lead.classification ? <span className={'tag classification-' + lead.classification.toLowerCase()}>{lead.classification.replace(/_/g, ' ')}</span> : lead.auditAttemptStatus === 'NEEDS_MANUAL_REVIEW' ? null : <span className="muted">Not audited</span>}
+            {lead.auditAttemptStatus === 'NEEDS_MANUAL_REVIEW' && <><span className="tag audit-review">Manual review</span>{lead.auditAttemptReason && <small className="muted">{auditAttemptShortReason(lead.auditAttemptReason)}</small>}</>}
+          </div></td>
           <td data-label="Score"><strong>{lead.score ?? '—'}</strong></td><td data-label="Priority">{lead.priority || '—'}</td><td data-label="Status">{lead.status}</td><td data-label="Source">{lead.source}</td>
           <td data-label="Updated"><time dateTime={lead.updatedAt}>{new Date(lead.updatedAt).toLocaleDateString()}</time></td>
         </tr>)}

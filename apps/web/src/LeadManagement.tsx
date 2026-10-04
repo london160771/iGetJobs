@@ -12,11 +12,15 @@ export function LeadManagement({ lead, busy, needsReload, onBusy, onDirty, onUnc
     const form = event.currentTarget, values = new FormData(form);
     const input: Record<string, unknown> = { expectedUpdatedAt: lead.updatedAt };
     for (const [key, raw] of values) {
+      if (key === 'mockupCandidate') continue;
       if (typeof raw !== 'string') continue;
       const value = key === 'notes' || key === 'status' ? raw : key === 'followUpAt' ? raw ? raw + 'T12:00:00.000Z' : null : ['rating', 'reviewCount'].includes(key) ? raw === '' ? null : Number(raw) : raw.trim() || null;
       const previous = key === 'followUpAt' ? lead.followUpAt ? lead.followUpAt.slice(0, 10) + 'T12:00:00.000Z' : null : lead[key as keyof Lead];
       if (value !== previous) input[key] = value;
     }
+    const candidate = form.elements.namedItem('mockupCandidate');
+    if (!(candidate instanceof HTMLInputElement)) { setError('Mockup candidate could not be read. Your edits remain in the form.'); return; }
+    if (candidate.checked !== lead.mockupCandidate) input.mockupCandidate = candidate.checked;
     if (Object.keys(input).length === 1) { onDirty(false); setMessage('No changes to save.'); return; }
     const controller = new AbortController(); controllerRef.current = controller;
     onBusy(true); setError(null); setMessage(null);
@@ -38,6 +42,7 @@ export function LeadManagement({ lead, busy, needsReload, onBusy, onDirty, onUnc
         <label>Pipeline status<select name="status" defaultValue={lead.status}>{leadStatuses.map(status => <option key={status}>{status}</option>)}</select></label>
         <label>Follow-up date<input name="followUpAt" type="date" defaultValue={lead.followUpAt?.slice(0, 10) || ''} />{lead.followUpAt && <small>{followUpState(lead.followUpAt, new Date().toLocaleDateString('en-CA'))}</small>}</label>
       </div><label className="notes-field">Notes<textarea name="notes" rows={5} maxLength={10000} defaultValue={lead.notes} placeholder="Conversation notes, next steps, and useful context…" /></label>
+      <label className="review-check"><input name="mockupCandidate" type="checkbox" defaultChecked={lead.mockupCandidate} />Mockup candidate <small>Manual flag only; no mockup is generated.</small></label>
       <details className="contact-editor"><summary>Edit business and contact data</summary><p className="muted">Contact or business changes clear the assessment. Source history stays preserved; clearing a website does not erase linked website evidence.</p><div className="management-fields">
         {text('businessName', 'Business name', 300)}{text('niche', 'Niche', leadLabelMaxLength)}{text('country', 'Country code', 2)}{text('city', 'City', leadLabelMaxLength)}{text('address', 'Address')}
         {text('website', 'Website', 2000)}{text('email', 'Email', 254, 'email')}{text('phone', 'Phone', 40, 'tel')}

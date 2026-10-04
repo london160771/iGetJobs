@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { classifications, dashboardCounts, filterAndSortLeads, leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, leadSorts, leadStatuses, summarizeLead, type Lead, type LeadFilters, type LeadPage, type ManagedLead } from '@igetjobs/shared';
+import { auditAttemptStatuses, classifications, dashboardCounts, filterAndSortLeads, leadLabelMaxLength, normalizedLeadLabel, validLeadLabel, leadSorts, leadStatuses, summarizeLead, type Lead, type LeadFilters, type LeadPage, type ManagedLead } from '@igetjobs/shared';
 import { RequestError } from './discovery/errors.js';
 import { leadFromRow, SupabaseLeadRepository } from './discovery/repository.js';
 import { normalizeLead } from './discovery/normalize.js';
@@ -8,7 +8,7 @@ import { createServerSupabase } from './supabase.js';
 import { readServerEnv } from './env.js';
 import { resolveWebsiteEvidence } from './website-safety.js';
 
-const editable = ['businessName', 'niche', 'country', 'city', 'address', 'phone', 'website', 'email', 'rating', 'reviewCount', 'status', 'notes', 'followUpAt'] as const;
+const editable = ['businessName', 'niche', 'country', 'city', 'address', 'phone', 'website', 'email', 'rating', 'reviewCount', 'status', 'notes', 'followUpAt', 'mockupCandidate'] as const;
 const assessmentInputs = ['businessName', 'niche', 'country', 'city', 'address', 'phone', 'website', 'domain', 'email', 'socials', 'rating', 'reviewCount', 'source', 'sourceId', 'provenance'] as const;
 const timestamp = (value: unknown): value is string => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) return false;
@@ -16,15 +16,16 @@ const timestamp = (value: unknown): value is string => {
   return new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
 };
 export function parseLeadFilters(input: Record<string, unknown>): LeadFilters {
-  const allowed = ['niche', 'country', 'city', 'classification', 'priority', 'status', 'source', 'hasEmail', 'hasPhone', 'minScore', 'maxScore', 'sort', 'page'];
+  const allowed = ['niche', 'country', 'city', 'classification', 'auditStatus', 'priority', 'status', 'source', 'hasEmail', 'hasPhone', 'minScore', 'maxScore', 'sort', 'page'];
   if (Object.keys(input).some(key => !allowed.includes(key)) || Object.values(input).some(value => typeof value !== 'string' || value.length > leadLabelMaxLength)) throw new RequestError(400, 'Invalid lead filters.');
   const query: LeadFilters = { sort: 'newest', page: 1 };
   for (const key of ['niche', 'country', 'city', 'classification', 'priority', 'status', 'source', 'hasEmail', 'hasPhone'] as const) if (input[key]) query[key] = (input[key] as string).trim();
+  if (input.auditStatus) query.auditStatus = input.auditStatus as NonNullable<LeadFilters['auditStatus']>;
   for (const key of ['niche', 'city'] as const) {
     if (!validLeadLabel(input[key])) throw new RequestError(400, `City and niche must not exceed ${leadLabelMaxLength} characters.`);
     if (input[key]) query[key] = normalizedLeadLabel(input[key]) || '';
   }
-  for (const [key, values] of Object.entries({ classification: [...classifications, 'UNAUDITED'], priority: ['High', 'Medium', 'Low'], status: leadStatuses, source: ['GEOAPIFY', 'OSM', 'SERPAPI', 'CSV'], hasEmail: ['yes', 'no'], hasPhone: ['yes', 'no'] })) {
+  for (const [key, values] of Object.entries({ classification: [...classifications, 'UNAUDITED'], auditStatus: auditAttemptStatuses, priority: ['High', 'Medium', 'Low'], status: leadStatuses, source: ['GEOAPIFY', 'OSM', 'SERPAPI', 'CSV'], hasEmail: ['yes', 'no'], hasPhone: ['yes', 'no'] })) {
     if (input[key] && !values.includes(input[key] as never)) throw new RequestError(400, 'Invalid lead filters.');
   }
   for (const key of ['minScore', 'maxScore'] as const) if (input[key] !== undefined && input[key] !== '') {
@@ -48,6 +49,7 @@ export function managementChanges(lead: Lead, input: Record<string, unknown>): R
   if (input.country && (typeof input.country !== 'string' || !/^[a-z]{2}$/i.test(input.country))) throw new RequestError(400, 'Country must be a two-letter code.');
   for (const key of ['rating', 'reviewCount'] as const) if (input[key] !== undefined && input[key] !== null && (typeof input[key] !== 'number' || !Number.isFinite(input[key]) || input[key] < 0 || (key === 'rating' ? input[key] > 5 : !Number.isSafeInteger(input[key]) || input[key] > 2147483647))) throw new RequestError(400, 'Rating or review count is invalid.');
   if (input.status !== undefined && !leadStatuses.includes(input.status as never)) throw new RequestError(400, 'Invalid pipeline status.');
+  if (input.mockupCandidate !== undefined && typeof input.mockupCandidate !== 'boolean') throw new RequestError(400, 'Mockup candidate must be a manual yes/no choice.');
   if (input.notes !== undefined && (typeof input.notes !== 'string' || input.notes.length > 10000)) throw new RequestError(400, 'Notes must be text up to 10,000 characters.');
   if (input.followUpAt !== undefined && input.followUpAt !== null && !timestamp(input.followUpAt)) throw new RequestError(400, 'Follow-up must be an ISO date/time or null.');
   // Validate labels that are actually edited. Historical overlong labels may be
@@ -60,12 +62,12 @@ export function managementChanges(lead: Lead, input: Record<string, unknown>): R
   const changes: Record<string, unknown> = {};
   for (const key of editable) {
     if (!Object.hasOwn(input, key)) continue;
-    const value = key === 'status' || key === 'notes' ? input[key] : key === 'followUpAt' ? input[key] === null ? null : new Date(input[key] as string).toISOString() : normalized[key];
+    const value = key === 'status' || key === 'notes' || key === 'mockupCandidate' ? input[key] : key === 'followUpAt' ? input[key] === null ? null : new Date(input[key] as string).toISOString() : normalized[key];
     if (value !== lead[key]) changes[key.replace(/[A-Z]/g, letter => '_' + letter.toLowerCase())] = value;
   }
   if (Object.hasOwn(input, 'website') && normalized.domain !== lead.domain) changes.domain = normalized.domain;
   const next = { ...lead, ...Object.fromEntries(Object.entries(changes).map(([key, value]) => [key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase()), value])) };
-  if (assessmentInputs.some(key => JSON.stringify(next[key]) !== JSON.stringify(lead[key]))) Object.assign(changes, { audit: null, classification: null, score: null, score_reasons: [] });
+  if (assessmentInputs.some(key => JSON.stringify(next[key]) !== JSON.stringify(lead[key]))) Object.assign(changes, { audit: null, classification: null, score: null, score_reasons: [], audit_attempt_status: 'NOT_AUDITED', audit_attempt_reason: null, audit_attempted_at: null, audit_attempt_detail: null });
   return changes;
 }
 export interface ManagementRepository {

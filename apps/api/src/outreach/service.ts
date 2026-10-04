@@ -114,7 +114,7 @@ export class OutreachService {
   async acceptEmail(owner: string, token: string, id: string, input: Record<string, unknown>) {
     const { repository,lead } = await this.loaded(owner,token,id,input,[]), found = lead.contactEnrichment, domain = hunterDomain(lead);
     if (usableEmail(lead.email) || !found || found.state !== 'found' || !usableEmail(found.email) || !domain || found.inputKey !== enrichmentKey(lead,domain)) throw new RequestError(409,'Review a current Hunter candidate before accepting it. Existing emails are never overwritten.');
-    return repository.update(lead,{ email:found.email,contact_enrichment:{ ...found,state:'accepted' },audit:null,classification:null,score:null,score_reasons:[] });
+    return repository.update(lead,{ email:found.email,contact_enrichment:{ ...found,state:'accepted' },audit:null,classification:null,score:null,score_reasons:[],audit_attempt_status:'NOT_AUDITED',audit_attempt_reason:null,audit_attempted_at:null,audit_attempt_detail:null });
   }
 }
 export function createOutreachService(env: NodeJS.ProcessEnv) {
