@@ -68,8 +68,10 @@ test('actual quota migration enforces atomic caps/cooldowns, survives fresh guar
 test('database quota failure blocks provider I/O, rejects non-atomic saves, and Hunter reserves before lookup', async () => {
   let calls = 0, reserved = 0;
   const failed = quotaStore({ rpc:async () => ({ data:null,error:{ code:'unexpected',message:'private database detail fixture-secret' } }) });
-  const guard = new ProviderGuard(failed);
-  await assert.rejects(guard.run('OSM','blocked',async () => { calls++; }),error => error instanceof RequestError && error.status === 503 && !error.message.includes('fixture-secret'));
+  for (const provider of ['OSM','SERPAPI','GEOAPIFY'] as const) {
+    const guard = new ProviderGuard(failed);
+    await assert.rejects(guard.run(provider,'blocked-' + provider,async () => { calls++; }),error => error instanceof RequestError && error.status === 503 && !error.message.includes('fixture-secret'));
+  }
   assert.equal(calls,0); await assert.rejects(failed.save({}),/atomically/);
   const store = quotaStore({ rpc:async (name,input) => {
     assert.equal(name,'reserve_provider_usage'); assert.deepEqual(input,{ p_provider:'HUNTER',p_limit:10 }); reserved++;
@@ -81,4 +83,39 @@ test('database quota failure blocks provider I/O, rejects non-atomic saves, and 
   }) as typeof fetch;
   const hunter = new HunterAdapter('fixture-secret',store,10,transport);
   assert.deepEqual(await hunter.lookup('fixture.com'),{ state:'no_result' }); assert.equal(calls,2); assert.equal(reserved,1);
+});
+
+test('quota status accepts historical AgentRouter usage but reserves only active V1 providers', async () => {
+  const historical = {
+    OSM:{ period:'2026-10-04',count:1,lastCall:1000 },
+    SERPAPI:{ period:'2026-10',count:2,lastCall:2000 },
+    GEOAPIFY:{ period:'2026-10-04',count:3,lastCall:3000 },
+    AGENTROUTER:{ period:'2026-10-04',count:5,lastCall:4000 }
+  };
+  const reservations: string[] = [];
+  const store = quotaStore({ rpc:async (name,input) => {
+    if (name === 'provider_usage_status') return { data:historical,error:null };
+    reservations.push(String(input?.p_provider));
+    return { data:{ count:1,period:'2026-10',lastCall:5000 },error:null };
+  } });
+  assert.deepEqual(await store.load(),historical);
+  await store.reserve!('SERPAPI',50);
+  await store.reserve!('GEOAPIFY',100);
+  assert.deepEqual(reservations,['SERPAPI','GEOAPIFY']);
+  await assert.rejects((store.reserve as (provider:string,limit:number)=>Promise<void>)('AGENTROUTER',35),error => error instanceof RequestError && error.status === 503);
+  assert.deepEqual(reservations,['SERPAPI','GEOAPIFY']);
+});
+
+test('quota status still rejects unknown provider names and malformed active or historical rows', async () => {
+  const invalidValues: unknown[] = [
+    { UNKNOWN:{ period:'2026-10',count:1,lastCall:1 } },
+    { AGENTROUTER:{ period:'2026-10',count:-1,lastCall:1 } },
+    { SERPAPI:{ period:'2026-10',count:1.5,lastCall:1 } },
+    { GEOAPIFY:{ period:'2026-10',count:1,lastCall:Number.NaN } },
+    { OSM:[] }
+  ];
+  for (const data of invalidValues) {
+    const store = quotaStore({ rpc:async () => ({ data,error:null }) });
+    await assert.rejects(store.load(),error => error instanceof RequestError && error.status === 503);
+  }
 });

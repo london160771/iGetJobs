@@ -8,6 +8,8 @@ import { createApp } from '../apps/api/src/app.js';
 import { prepareProduction, usageDirectory, verifiedHunterKey } from '../apps/api/src/production.js';
 import { supabaseUsageStore } from '../apps/api/src/quota.js';
 import { createOutreachService } from '../apps/api/src/outreach/service.js';
+import { ProviderGuard, type UsageStore } from '../apps/api/src/discovery/usage.js';
+import { RequestError } from '../apps/api/src/discovery/errors.js';
 
 test('production requires Supabase quota storage and HTTPS public configuration, with no filesystem fallback', async () => {
     const env = { NODE_ENV:'production', SUPABASE_URL:'https://fixture.supabase.co', SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture' };
@@ -17,6 +19,35 @@ test('production requires Supabase quota storage and HTTPS public configuration,
     await assert.rejects(prepareProduction({ NODE_ENV:'production' }), /configuration/);
     await assert.rejects(prepareProduction(env), /SUPABASE_QUOTA_SERVICE_KEY/);
     assert.throws(() => supabaseUsageStore({ ...env,SUPABASE_QUOTA_SERVICE_KEY:'sb_publishable_fixture' }), /server-only/);
+});
+
+test('production starts through a quota-status outage and provider lookups still fail closed on reservation failure', async () => {
+  const env = {
+    NODE_ENV:'production',
+    SUPABASE_URL:'https://fixture.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture',
+    SUPABASE_QUOTA_SERVICE_KEY:'sb_secret_fixture'
+  };
+  let statusReads = 0, reservations = 0, providerLookups = 0;
+  const store: UsageStore = {
+    async load() {
+      statusReads++;
+      throw new RequestError(503,'Simulated provider_usage_status outage.');
+    },
+    async save() { throw new RequestError(503,'Provider usage must be reserved atomically.'); },
+    async reserve() {
+      reservations++;
+      throw new RequestError(503,'Provider usage protection is unavailable. No lookup was made.');
+    }
+  };
+  await prepareProduction(env, () => store);
+  assert.equal(statusReads,0,'Startup must not depend on provider_usage_status availability.');
+  const guard = new ProviderGuard(store);
+  for (const provider of ['SERPAPI','GEOAPIFY'] as const) {
+    await assert.rejects(guard.run(provider,'startup-test-' + provider,async () => { providerLookups++; }),error => error instanceof RequestError && error.status === 503);
+  }
+  assert.equal(reservations,2);
+  assert.equal(providerLookups,0,'A provider adapter must not run without a confirmed durable reservation.');
 });
 
 test('a Hunter key alone cannot enable lookup; operator verification and live provider guards are separate', () => {

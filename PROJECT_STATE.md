@@ -2,6 +2,17 @@
 
 ## Current status
 
+**V1.0.4 quota-startup hotfix — local checks PASS; production verification pending.** This focused change accepts `AGENTROUTER` only as inert historical quota data, removes the startup dependency on the quota-status RPC, and preserves atomic fail-closed reservations for active providers. No AgentRouter runtime or V2 work.
+
+## V1.0.4 production quota-startup hotfix — candidate (2026-10-04)
+
+- Root cause confirmed in the code and applied schema: migration `202610020005_provider_usage.sql` exposes every persisted usage row through `provider_usage_status()`, while migration `202610030007_ai_assist.sql` expanded the provider constraint to include `AGENTROUTER`. The active `quotaStore.load()` allowlist rejected that historical key. `prepareProduction()` awaited this read before `app.listen()`, so a retained AgentRouter row could abort startup and leave Render with no bound port.
+- The quota status reader now validates the known historical `AGENTROUTER` row shape without making it an active `QuotaProvider`. `quotaStore.reserve()` rejects it at runtime before any RPC; active V1 provider types remain unchanged. Unknown provider names and malformed rows still fail closed.
+- Startup validates HTTPS Supabase and server-only quota credentials without requiring a live `provider_usage_status()` call. Discovery still requires its atomic `reserve_provider_usage()` RPC before adapter network I/O; RPC failure returns 503 and makes no provider lookup. Authenticated non-provider workflows and `/api/health` can start during a temporary status-RPC outage.
+- No SQL migration or production data change was made. Migrations 005/007 remain untouched; no quota rows were deleted or reset.
+- Local checks: 103/103 tests, lint, typecheck, production build, and secret scan pass. Tests cover a valid historical AgentRouter status row, runtime reservation denial, malformed/unknown rows, active Geoapify/SerpAPI validation, startup without a status read, and provider-I/O denial when reservation fails. The known ~501KB frontend chunk advisory remains.
+- Production deployment and verification are pending. Do not tag `v1.0.4` until Render health/startup, existing lead reads, manual-review display, and live quota-protected Geoapify/SerpAPI checks pass. Do not start V2.
+
 **V1.0.3 clean release: VERIFIED — 2026-10-04.** It is based on tag `v1.0.2` and contains only manual audit-review and manual mockup-candidate hardening. No AgentRouter runtime, UI, tests, environment requirements, or quota calls are included. Production is https://igetjobs.vercel.app and https://igetjobs-api.onrender.com. Vercel Hobby remains accepted for private personal use; review hosting eligibility before commercial or wider public use. No V2 work.
 
 ## V1.0.3 clean release — candidate verification (2026-10-04)

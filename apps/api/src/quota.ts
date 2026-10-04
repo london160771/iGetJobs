@@ -4,16 +4,21 @@ import { RequestError } from './discovery/errors.js';
 import type { QuotaProvider, Usage, UsageStore } from './discovery/usage.js';
 
 export interface QuotaRpc { rpc(name: string, input?: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message?: string; code?: string } | null }> }
+const activeQuotaProviders = new Set<string>(['OSM','SERPAPI','HUNTER','GEOAPIFY']);
+// Migration 202610030007 widened provider_usage for an experiment that is not
+// part of V1.0.3. Read its existing row for compatibility, but never reserve it.
+const historicalQuotaProviders = new Set(['AGENTROUTER']);
 export function quotaStore(client: QuotaRpc): UsageStore {
   return {
     async load() {
       const result = await client.rpc('provider_usage_status');
       if (result.error || !result.data || typeof result.data !== 'object' || Array.isArray(result.data)) throw new RequestError(503,'Provider usage protection is unavailable.');
-      if (Object.entries(result.data).some(([provider,row]) => !['OSM','SERPAPI','HUNTER','GEOAPIFY'].includes(provider) || !row || typeof row !== 'object' || !('count' in row) || !Number.isInteger(row.count) || row.count < 0 || !('period' in row) || typeof row.period !== 'string' || !('lastCall' in row) || typeof row.lastCall !== 'number' || !Number.isFinite(row.lastCall))) throw new RequestError(503,'Provider usage protection is unavailable.');
+      if (Object.entries(result.data).some(([provider,row]) => (!activeQuotaProviders.has(provider) && !historicalQuotaProviders.has(provider)) || !row || typeof row !== 'object' || Array.isArray(row) || !('count' in row) || !Number.isInteger(row.count) || row.count < 0 || !('period' in row) || typeof row.period !== 'string' || !('lastCall' in row) || typeof row.lastCall !== 'number' || !Number.isFinite(row.lastCall))) throw new RequestError(503,'Provider usage protection is unavailable.');
       return result.data as Usage;
     },
     async save() { throw new RequestError(503,'Provider usage must be reserved atomically.'); },
     async reserve(provider: QuotaProvider, limit: number) {
+      if (!activeQuotaProviders.has(provider)) throw new RequestError(503,'Provider usage protection is unavailable. No lookup was made.');
       const result = await client.rpc('reserve_provider_usage',{ p_provider:provider,p_limit:limit });
       if (result.error) {
         if (result.error.code === 'P0001' && ['QUOTA_COOLDOWN','QUOTA_EXHAUSTED'].includes(result.error.message || '')) throw new RequestError(429,result.error.message === 'QUOTA_COOLDOWN' ? 'Please wait before another provider lookup.' : 'The configured provider attempt cap is exhausted.');

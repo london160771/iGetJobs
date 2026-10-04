@@ -17,9 +17,12 @@ export function verifiedHunterKey(env: NodeJS.ProcessEnv): string | null {
   // Every lookup still independently checks the live account and remaining quota.
   return env.HUNTER_FREE_PLAN_VERIFIED === 'true' ? env.HUNTER_API_KEY?.trim() || null : null;
 }
-export async function prepareProduction(env: NodeJS.ProcessEnv): Promise<void> {
+export async function prepareProduction(env: NodeJS.ProcessEnv, createUsageStore = supabaseUsageStore): Promise<void> {
   if (env.NODE_ENV !== 'production') return;
   const settings = readServerEnv(env);
   if (!settings.supabaseUrl || !settings.supabaseKey || new URL(settings.supabaseUrl).protocol !== 'https:') throw new Error('Production requires HTTPS Supabase public configuration.');
-  await supabaseUsageStore(env).load(); // Fail closed on absent credentials/schema/storage.
+  // Validate that durable quota credentials are configured without making a
+  // live status RPC a prerequisite for binding the API port. Every provider
+  // operation still reserves atomically and fails closed before network I/O.
+  createUsageStore(env);
 }
