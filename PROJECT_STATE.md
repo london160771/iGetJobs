@@ -2,7 +2,16 @@
 
 ## Current status
 
-**V1.0.4 quota-startup hotfix — local checks PASS; production verification pending.** This focused change accepts `AGENTROUTER` only as inert historical quota data, removes the startup dependency on the quota-status RPC, and preserves atomic fail-closed reservations for active providers. No AgentRouter runtime or V2 work.
+**V1.0.4 quota-startup hotfix — production verification PASS (2026-10-04).** This focused change accepts `AGENTROUTER` only as inert historical quota data, removes the startup dependency on the quota-status RPC, and preserves atomic fail-closed reservations for active providers. No AgentRouter runtime or V2 work.
+
+## V1.0.4 production verification — 2026-10-04
+
+- Confirmed root cause and compatibility fix are described below. Main commit `6eab36612a7072a1eb0c62177292cd663d5cfe3f` deployed to Render. Startup logs show the Node API binding `0.0.0.0:10000` and Render reporting the service live; the prior quota-status startup crash and port-scan timeout did not recur.
+- Direct `https://igetjobs-api.onrender.com/api/health` returned HTTP 200 with status `ok` and Supabase `configured`. Existing authenticated Supabase leads loaded (18 total). Midtown Dental remained `NEEDS_MANUAL_REVIEW / HTML_TOO_LARGE` (242,745 measured bytes against the 128 KB limit), with no classification or score; the Audit status filter included it and Classification → Not audited excluded it. No lead was edited.
+- Real authenticated production Geoapify search for dentists in Toronto returned 96 preview results. Real SerpAPI search for the same niche/city returned 20. Both displayed `Save selected (0)` and all rows defaulted to Skip; previews showed source-only website/contact signals. No preview result was saved and no production lead was created or changed.
+- Browser console/error log check returned no warnings or errors. Local tests prove historical `AGENTROUTER` usage rows load as inert data, unknown/malformed rows fail closed, active Geoapify/SerpAPI reservations remain validated, and provider lookup is not called when durable reservation fails. These production searches exercised the normal protected provider paths; no production quota data was reset or modified.
+- AgentRouter remains inactive: no active V1 quota-provider type/reservation, API route, frontend runtime/UI, key requirement, or request was introduced. Existing migration history and historical quota rows were not modified. V2 was not started.
+- Verification: 103/103 tests, lint, typecheck, production build and secret scan pass. The existing non-blocking ~501KB frontend chunk advisory remains. No deployment code fix beyond the committed hotfix was needed. Remote inspection found no existing `v1.0.4` tag; this verified release commit is designated for the new tag.
 
 ## V1.0.4 production quota-startup hotfix — candidate (2026-10-04)
 
