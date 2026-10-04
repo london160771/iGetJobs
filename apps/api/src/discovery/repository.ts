@@ -7,7 +7,16 @@ export function leadToRow(lead: Lead, ownerId: string) {
   return { ...Object.fromEntries(Object.entries(lead).map(([key, value]) => [snake(key), value])), owner_id: ownerId };
 }
 export function leadFromRow(row: Record<string, unknown>): Lead {
-  return Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'owner_id').map(([key, value]) => [key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase()), value])) as unknown as Lead;
+  const lead = Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'owner_id').map(([key, value]) => [key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase()), value])) as unknown as Lead;
+  // Backward compatibility for snapshots/fixtures created before the attempt fields.
+  if (!lead.auditAttemptStatus) {
+    const completed = Boolean(lead.audit && lead.classification && lead.score != null);
+    lead.auditAttemptStatus = completed ? 'COMPLETED' : 'NOT_AUDITED';
+    lead.auditAttemptReason = null;
+    lead.auditAttemptedAt = completed ? lead.audit?.auditedAt || lead.updatedAt : null;
+    lead.auditAttemptDetail = null;
+  }
+  return lead;
 }
 export interface LeadRepository {
   identities(): Promise<LeadIdentity[]>;
@@ -52,7 +61,7 @@ export class SupabaseLeadRepository implements LeadRepository {
     // New evidence can invalidate NO_WEBSITE or source-confidence scoring. A repeated
     // identical link retains the audit; genuinely changed history requires a new audit.
     const changed = canonicalJson(provenance) !== canonicalJson(lead.provenance);
-    const updated = await this.client.from('leads').update({ provenance, ...(changed ? { audit: null, classification: null, score: null, score_reasons: [] } : {}) }).eq('owner_id', this.ownerId).eq('id', id).eq('updated_at', lead.updatedAt).select('*').maybeSingle();
+    const updated = await this.client.from('leads').update({ provenance, ...(changed ? { audit: null, classification: null, score: null, score_reasons: [], audit_attempt_status: 'NOT_AUDITED', audit_attempt_reason: null, audit_attempted_at: null, audit_attempt_detail: null } : {}) }).eq('owner_id', this.ownerId).eq('id', id).eq('updated_at', lead.updatedAt).select('*').maybeSingle();
     if (updated.error || !updated.data) throw new RequestError(409, 'The saved lead changed. Refresh the preview before adding source metadata.');
     return leadFromRow(updated.data);
   }

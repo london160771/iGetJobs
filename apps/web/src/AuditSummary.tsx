@@ -1,6 +1,17 @@
-import { leadPriority, type Lead } from '@igetjobs/shared';
+import { auditAttemptReasonLabel, leadPriority, type Lead } from '@igetjobs/shared';
+
+export function AuditAttemptNotice({ lead }: { lead: Lead }) {
+  if (lead.auditAttemptStatus !== 'NEEDS_MANUAL_REVIEW') return null;
+  return <div className="message warning-message" role="status">
+    <p><strong>Audit status:</strong> Needs manual review</p>
+    <p><strong>Reason:</strong> {lead.auditAttemptReason ? auditAttemptReasonLabel(lead.auditAttemptReason, lead.auditAttemptDetail) : 'Automatic inspection could not complete reliably.'}</p>
+    <p>Automatic quality classification was not completed. Review this website manually.</p>
+    {lead.audit && lead.classification && lead.score !== null && <p>The previous completed assessment is preserved and unchanged.</p>}
+  </div>;
+}
+
 export function AuditSummary({ lead, detailed = false }: { lead: Lead; detailed?: boolean }) {
-  if (!lead.audit || lead.score === null || !lead.classification) return <p className="muted">Not audited. No classification or score yet.</p>;
+  if (!lead.audit || lead.score === null || !lead.classification) return <p className="muted">{lead.auditAttemptStatus === 'NOT_AUDITED' ? 'Not audited. No audit attempt has been made yet.' : 'No completed classification or score is available.'}</p>;
   const priority = leadPriority(lead.score, lead.audit.scoring);
   return <div className="audit-summary">
     <div className="lead-title"><span className={`tag classification-${lead.classification.toLowerCase()}`}>{lead.classification.replace(/_/g, ' ')}</span><strong className="numeric-score">{lead.score}<span>/100</span></strong><span className="tag">{priority} priority</span></div>

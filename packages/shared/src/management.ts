@@ -1,4 +1,4 @@
-import type { Lead, LeadPriority } from './index.js';
+import type { AuditAttemptStatus, Lead, LeadPriority } from './index.js';
 import { leadPriority } from './index.js';
 
 export const leadStatuses = ['New', 'Qualified', 'Contacted', 'Replied', 'Call Booked', 'Closed', 'Lost'] as const;
@@ -6,28 +6,30 @@ export const classifications = ['NO_WEBSITE', 'POOR_WEBSITE', 'ACCEPTABLE_WEBSIT
 export const leadSorts = ['score_desc', 'score_asc', 'newest', 'oldest', 'updated', 'name'] as const;
 export interface LeadActivity {
   at: string; fields: string[]; assessmentInvalidated: boolean; auditCompleted: boolean;
+  auditAttempted?: boolean;
   statusFrom?: string; statusTo?: string; followUpFrom?: string | null; followUpTo?: string | null;
 }
 export interface LeadFilters {
-  niche?: string; country?: string; city?: string; classification?: string; priority?: string;
+  niche?: string; country?: string; city?: string; classification?: string; auditStatus?: AuditAttemptStatus; priority?: string;
   status?: string; source?: string; hasEmail?: string; hasPhone?: string;
   minScore?: number; maxScore?: number; sort: typeof leadSorts[number]; page: number;
 }
-export type ManagedLead = Pick<Lead, 'id' | 'businessName' | 'niche' | 'country' | 'city' | 'address' | 'phone' | 'email' | 'website' | 'domain' | 'classification' | 'score' | 'status' | 'source' | 'sourceId' | 'createdAt' | 'updatedAt' | 'followUpAt'> & { priority: LeadPriority | null };
+export type ManagedLead = Pick<Lead, 'id' | 'businessName' | 'niche' | 'country' | 'city' | 'address' | 'phone' | 'email' | 'website' | 'domain' | 'classification' | 'auditAttemptStatus' | 'auditAttemptReason' | 'auditAttemptedAt' | 'score' | 'status' | 'source' | 'sourceId' | 'createdAt' | 'updatedAt' | 'followUpAt'> & { priority: LeadPriority | null };
 export interface DashboardCounts { total: number; qualified: number; noWebsite: number; poorWebsite: number; contacted: number; replied: number; callsBooked: number; closed: number }
 export interface LeadPage {
   leads: ManagedLead[]; total: number; page: number; pageSize: number;
   options: { niches: string[]; countries: string[]; cities: string[] };
 }
 export function summarizeLead(lead: Lead): ManagedLead {
-  const { id, businessName, niche, country, city, address, phone, email, website, domain, classification, score, status, source, sourceId, createdAt, updatedAt, followUpAt } = lead;
-  return { id, businessName, niche, country, city, address, phone, email, website, domain, classification, score, status, source, sourceId, createdAt, updatedAt, followUpAt, priority: leadPriority(score, lead.audit?.scoring) };
+  const { id, businessName, niche, country, city, address, phone, email, website, domain, classification, auditAttemptStatus, auditAttemptReason, auditAttemptedAt, score, status, source, sourceId, createdAt, updatedAt, followUpAt } = lead;
+  return { id, businessName, niche, country, city, address, phone, email, website, domain, classification, auditAttemptStatus, auditAttemptReason, auditAttemptedAt, score, status, source, sourceId, createdAt, updatedAt, followUpAt, priority: leadPriority(score, lead.audit?.scoring) };
 }
 export function filterAndSortLeads(leads: ManagedLead[], query: LeadFilters): ManagedLead[] {
   const rows = leads.filter(lead => {
     for (const key of ['niche', 'country', 'city', 'classification', 'priority', 'status', 'source'] as const) {
-      if (query[key] && (key === 'classification' && query[key] === 'UNAUDITED' ? lead.classification !== null : lead[key] !== query[key])) return false;
+      if (query[key] && (key === 'classification' && query[key] === 'UNAUDITED' ? lead.auditAttemptStatus !== 'NOT_AUDITED' : lead[key] !== query[key])) return false;
     }
+    if (query.auditStatus && lead.auditAttemptStatus !== query.auditStatus) return false;
     if (query.minScore !== undefined && (lead.score === null || lead.score < query.minScore)) return false;
     if (query.maxScore !== undefined && (lead.score === null || lead.score > query.maxScore)) return false;
     if (query.hasEmail && Boolean(lead.email) !== (query.hasEmail === 'yes')) return false;

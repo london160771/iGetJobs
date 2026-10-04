@@ -20,6 +20,7 @@ select:focus-visible { outline: 3px solid #157568; outline-offset: 2px; }
 .csv-input input { max-width: 440px; }
 .message { padding: 16px 18px; background: #fff; border: 1px solid #dfe7e2; border-radius: 7px; margin-bottom: 20px; font-size: .85rem; line-height: 1.6; }
 .error-message { background: #fff6ee; border-color: #e8c6ad; color: #8b4624; }
+.warning-message { background: #fff8e8; border-color: #e4d3ad; color: #624819; }
 .success-message { background: #e9f3ef; border-color: #c3dfd3; }
 .results-heading { margin: 28px 0 20px; }
 .results-heading p { font-size: .75rem; margin-top: 8px; }
@@ -116,6 +117,8 @@ main { padding: 46px 40px; width: 100%; max-width: 1280px; margin: 0 auto; outli
 .page-header > p:last-child { color: #61716b; font-size: .875rem; line-height: 1.6; margin-top: 12px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
 .tag { display: inline-block; padding: 6px 10px; border: 1px solid #dbe4df; border-radius: 5px; font-size: .64rem; color: #596b62; background: #fff; white-space: nowrap; }
+.audit-review { color: #825219; border-color: #e4d3ad; background: #fff8e8; }
+.classification-cell { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 5px; }
 .empty-state { background: #fff; border: 1px solid #dfe7e2; border-radius: 10px; padding: 54px 24px; text-align: center; }
 .empty-icon { display: grid; place-items: center; height: 54px; width: 54px; margin: 0 auto 20px; border-radius: 14px; background: #eef5f1; color: #157568; }
 .empty-state h2 { font-size: 1.1rem; letter-spacing: -.02em; }

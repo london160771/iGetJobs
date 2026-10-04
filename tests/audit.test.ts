@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AuditCheck, Lead } from '@igetjobs/shared';
+import type { AuditAttemptDetail, AuditCheck, Lead } from '@igetjobs/shared';
 import { leadPriority } from '@igetjobs/shared';
 import { normalizeLead } from '../apps/api/src/discovery/normalize.js';
 import { RequestError } from '../apps/api/src/discovery/errors.js';
 import { leadToRow, SupabaseLeadRepository } from '../apps/api/src/discovery/repository.js';
 import { resolveWebsiteEvidence } from '../apps/api/src/website-safety.js';
 import { auditLead } from '../apps/api/src/audit/engine.js';
+import { AuditManualReviewError } from '../apps/api/src/audit/manual-review.js';
 import { defaultScoring, evaluateLead, readScoring } from '../apps/api/src/audit/policy.js';
 import { fetchLimits, fetchWebsite, pinnedRequestOptions, readWebsiteResponse, WebsiteFetchError, type WebsiteFetchResult, type WebsiteResponse } from '../apps/api/src/audit/fetcher.js';
 import { AuditService, SupabaseAuditRepository, type AuditRepository } from '../apps/api/src/audit/service.js';
@@ -86,10 +87,11 @@ test('hidden/script contact and CTA indicators do not count as visible HTML evid
   assert.equal(audited.audit.checks.find(check => check.key === 'cta')?.outcome, 'fail');
 });
 
-test('unsafe, restricted, oversized and unsupported pages remain incomplete instead of inventing quality scores', async () => {
-  for (const kind of ['blocked', 'too_large', 'encoding', 'redirect'] as const) await assert.rejects(auditLead(lead('clinic.com'), undefined, defaultScoring, async () => { throw new WebsiteFetchError(kind, 'Bounded fetch declined.'); }), error => error instanceof RequestError && error.status === 422);
-  for (const status of [401, 403, 429]) await assert.rejects(auditLead(lead('clinic.com'), undefined, defaultScoring, async () => ({ ...result(), status })), error => error instanceof RequestError && error.status === 422);
-  await assert.rejects(auditLead(lead('clinic.com'), undefined, defaultScoring, async () => ({ ...result(), headers: { 'content-type': 'application/pdf' } })), error => error instanceof RequestError && error.status === 422);
+test('unsafe, restricted, oversized and unsupported pages request manual review without inventing scores', async () => {
+  const codes = { blocked: 'OTHER_UNVERIFIED', too_large: 'HTML_TOO_LARGE', encoding: 'UNSUPPORTED_CONTENT', redirect: 'OTHER_UNVERIFIED' } as const;
+  for (const kind of Object.keys(codes) as (keyof typeof codes)[]) await assert.rejects(auditLead(lead('clinic.com'), undefined, defaultScoring, async () => { throw new WebsiteFetchError(kind, 'Bounded fetch declined.'); }), error => error instanceof AuditManualReviewError && error.reason === codes[kind]);
+  for (const status of [401, 403, 429]) await assert.rejects(auditLead(lead('clinic.com'), undefined, defaultScoring, async () => ({ ...result(), status })), error => error instanceof AuditManualReviewError && error.reason === 'ACCESS_RESTRICTED' && error.detail?.httpStatus === status);
+  await assert.rejects(auditLead(lead('clinic.com'), undefined, defaultScoring, async () => ({ ...result(), headers: { 'content-type': 'application/pdf' } })), error => error instanceof AuditManualReviewError && error.reason === 'UNSUPPORTED_CONTENT');
 });
 
 test('classification and priority thresholds are inclusive and scoring caps reconcile with visible reasons', () => {
@@ -142,20 +144,24 @@ test('rebinding DNS after validation cannot alter a pinned connection; redirecte
 test('actual response reader bounds declared/streamed bytes, refuses compression, and never follows redirects', async () => {
   function stream(headers: IncomingMessage['headers'], statusCode = 200) { return Object.assign(new PassThrough(), { headers, statusCode }) as unknown as IncomingMessage & PassThrough; }
   const declared = stream({ 'content-length': String(fetchLimits.bytes + 1) });
-  await assert.rejects(readWebsiteResponse(declared), error => error instanceof WebsiteFetchError && error.kind === 'too_large'); assert.equal(declared.destroyed, true);
+  await assert.rejects(readWebsiteResponse(declared), error => error instanceof WebsiteFetchError && error.kind === 'too_large' && error.measuredBytes === fetchLimits.bytes + 1); assert.equal(declared.destroyed, true);
   const compressed = stream({ 'content-encoding': 'gzip' });
   await assert.rejects(readWebsiteResponse(compressed), error => error instanceof WebsiteFetchError && error.kind === 'encoding');
   const redirect = stream({ location: 'http://127.0.0.1/' }, 302);
   assert.equal((await readWebsiteResponse(redirect)).status, 302); assert.equal(redirect.destroyed, true);
   const oversized = stream({}); const promise = readWebsiteResponse(oversized);
   oversized.write(Buffer.alloc(fetchLimits.bytes + 1));
-  await assert.rejects(promise, error => error instanceof WebsiteFetchError && error.kind === 'too_large');
+  await assert.rejects(promise, error => error instanceof WebsiteFetchError && error.kind === 'too_large' && error.measuredBytes === fetchLimits.bytes + 1);
   const bounded = stream({}); const read = readWebsiteResponse(bounded); bounded.end('hello'); assert.equal((await read).bytes, 5);
 });
 
-test('audit service rejects foreign leads and field injection, saves only completed audits and throttles retries', async () => {
-  const original = lead(); let saves = 0;
-  const repository: AuditRepository = { findById: async id => id === original.id ? original : null, saveAudit: async (record, changes) => { saves++; return { ...record, ...changes }; } };
+test('audit service records manual review, rejects foreign leads, and keeps prior assessments unchanged', async () => {
+  const original = lead(); let saves = 0, manualAttempts = 0;
+  const repository: AuditRepository = {
+    findById: async id => id === original.id ? original : null,
+    saveAudit: async (record, changes) => { saves++; return { ...record, ...changes }; },
+    saveManualReview: async (record, attempt) => { manualAttempts++; return { ...record, auditAttemptStatus: 'NEEDS_MANUAL_REVIEW', auditAttemptReason: attempt.reason, auditAttemptedAt: attempt.attemptedAt, auditAttemptDetail: attempt.detail }; }
+  };
   const service = new AuditService(owner => owner === 'A' ? repository : { ...repository, findById: async () => null }, defaultScoring);
   await assert.rejects(service.detail('B', 'token', original.id), error => error instanceof RequestError && error.status === 404);
   await assert.rejects(service.run('B', 'token', original.id, {}), error => error instanceof RequestError && error.status === 404);
@@ -164,21 +170,61 @@ test('audit service rejects foreign leads and field injection, saves only comple
   await assert.rejects(service.run('A', 'token', original.id, {}), error => error instanceof RequestError && error.status === 429);
   const unsafe = lead('http://127.0.0.1/');
   const declined = new AuditService(() => ({ ...repository, findById: async () => unsafe }), defaultScoring);
-  await assert.rejects(declined.run('A', 'token', unsafe.id, {}), error => error instanceof RequestError && error.status === 422); assert.equal(saves, 1);
+  const review = await declined.run('A', 'token', unsafe.id, {});
+  assert.equal(review.auditAttemptStatus, 'NEEDS_MANUAL_REVIEW'); assert.equal(review.auditAttemptReason, 'OTHER_UNVERIFIED');
+  assert.equal(review.classification, null); assert.equal(review.score, null); assert.equal(manualAttempts, 1); assert.equal(saves, 1);
+  const previousBase = lead('clinic.com');
+  const previous = { ...previousBase, ...(await auditLead(previousBase)) };
+  const preserveRepo: AuditRepository = { ...repository,
+    findById: async () => previous,
+    saveManualReview: async (record, attempt) => ({ ...record, auditAttemptStatus: 'NEEDS_MANUAL_REVIEW', auditAttemptReason: attempt.reason, auditAttemptedAt: attempt.attemptedAt, auditAttemptDetail: attempt.detail })
+  };
+  const retry = await new AuditService(() => preserveRepo, defaultScoring, async () => ({ ...result(), status: 403 })).run('A', 'token', previous.id, {});
+  assert.equal(retry.auditAttemptStatus, 'NEEDS_MANUAL_REVIEW'); assert.equal(retry.auditAttemptReason, 'ACCESS_RESTRICTED');
+  assert.equal(retry.classification, previous.classification); assert.equal(retry.score, previous.score); assert.deepEqual(retry.audit, previous.audit);
+  const measuredLead = lead('large-clinic.com'); let savedDetail: AuditAttemptDetail | null = null;
+  const measuredRepo: AuditRepository = { ...repository, findById: async () => measuredLead,
+    saveManualReview: async (_record, attempt) => { savedDetail = attempt.detail; return { ...measuredLead, auditAttemptStatus: 'NEEDS_MANUAL_REVIEW', auditAttemptReason: attempt.reason, auditAttemptedAt: attempt.attemptedAt, auditAttemptDetail: attempt.detail }; } };
+  const measured = await new AuditService(() => measuredRepo, defaultScoring, async () => { throw new WebsiteFetchError('too_large', 'Website response exceeds 1MB.', fetchLimits.bytes + 9); }).run('A', 'token', measuredLead.id, {});
+  assert.equal(measured.auditAttemptReason, 'HTML_TOO_LARGE');
+  assert.deepEqual(savedDetail, { measuredHtmlBytes: fetchLimits.bytes + 9, htmlByteLimit: fetchLimits.bytes, stage: 'fetch' });
+});
+
+test('a persisted manual-review attempt can be retried and later become completed', async () => {
+  let current = lead('clinic.com'), now = new Date('2026-10-04T12:00:00.000Z'), restricted = true;
+  const repository: AuditRepository = {
+    findById: async () => current,
+    saveAudit: async (_record, changes) => { current = { ...current, ...changes }; return current; },
+    saveManualReview: async (_record, attempt) => { current = { ...current, auditAttemptStatus: 'NEEDS_MANUAL_REVIEW', auditAttemptReason: attempt.reason, auditAttemptedAt: attempt.attemptedAt, auditAttemptDetail: attempt.detail }; return current; }
+  };
+  const service = new AuditService(() => repository, defaultScoring, async url => restricted ? { ...result(undefined, url), status: 429 } : result(undefined, url), () => new Date(now));
+  const first = await service.run('retry-owner', 'token', current.id, {});
+  assert.equal(first.auditAttemptStatus, 'NEEDS_MANUAL_REVIEW'); assert.equal(first.classification, null); assert.equal(first.score, null);
+  now = new Date(now.getTime() + 5001); restricted = false;
+  const second = await service.run('retry-owner', 'token', current.id, {});
+  assert.equal(second.auditAttemptStatus, 'COMPLETED'); assert.notEqual(second.classification, null); assert.notEqual(second.score, null);
 });
 
 test('audit persistence pins owner/ID/evidence timestamp, rejects stale writes and does not expose database errors', async () => {
   const original = lead(); const changes = await auditLead(original); const filters: [string, unknown][] = [];
   let data: Record<string, unknown> | null = null, failure: unknown = null, update: Record<string, unknown> = {};
-  const query = { update: (value: Record<string, unknown>) => { update = value; return query; }, eq: (key: string, value: unknown) => { filters.push([key, value]); return query; }, select: () => query, maybeSingle: async () => ({ data, error: failure }) };
+  const query = { update: (value: Record<string, unknown>) => { update = value; return query; }, eq: (key: string, value: unknown) => { filters.push([key, value]); return query; }, select: () => query, maybeSingle: async () => { if (!failure && data) data = { ...data, ...update }; return { data, error: failure }; } };
   const repository = new SupabaseAuditRepository({ from: () => query } as unknown as SupabaseClient, 'A');
   await assert.rejects(repository.saveAudit(original, changes), error => error instanceof RequestError && error.status === 409);
   assert.deepEqual(filters, [['owner_id', 'A'], ['id', original.id], ['updated_at', original.updatedAt]]);
-  assert.deepEqual(Object.keys(update).sort(), ['audit', 'classification', 'score', 'score_reasons']);
+  assert.deepEqual(Object.keys(update).sort(), ['audit', 'audit_attempt_detail', 'audit_attempt_reason', 'audit_attempt_status', 'audit_attempted_at', 'classification', 'score', 'score_reasons']);
   failure = { message: 'private detail' };
   await assert.rejects(repository.saveAudit(original, changes), error => error instanceof RequestError && error.status === 503 && !error.message.includes('private detail'));
   failure = null; data = { ...leadToRow(original, 'A'), ...update };
   assert.equal((await repository.saveAudit(original, changes)).classification, 'NO_WEBSITE');
+  const previous = { ...leadToRow(original, 'A'), ...update };
+  data = previous;
+  const attempt = { reason: 'ACCESS_RESTRICTED' as const, attemptedAt: fixedTime(), detail: { httpStatus: 403 } };
+  const result = await repository.saveManualReview(original, attempt);
+  assert.equal(result.classification, 'NO_WEBSITE'); assert.equal(result.score, changes.score);
+  assert.equal(result.auditAttemptStatus, 'NEEDS_MANUAL_REVIEW'); assert.equal(result.auditAttemptReason, 'ACCESS_RESTRICTED');
+  assert.equal((update as Record<string, unknown>).audit_attempt_status, 'NEEDS_MANUAL_REVIEW');
+  assert.deepEqual(Object.keys(update).sort(), ['audit_attempt_detail', 'audit_attempt_reason', 'audit_attempt_status', 'audit_attempted_at']);
 });
 
 test('new linked provenance invalidates a prior NO_WEBSITE assessment; identical links preserve a fresh audit', async () => {

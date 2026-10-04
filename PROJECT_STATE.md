@@ -2,7 +2,21 @@
 
 ## Current status
 
-**V1.0.2 baseline: COMPLETE and FROZEN — 2026-10-03; final read-only review: PASS.** V1.0.3 AI-assist code is on `main`, but the release is blocked by failed live AgentRouter responses. Do not tag v1.0.3 or begin V2. Production remains https://igetjobs.vercel.app and https://igetjobs-api.onrender.com.
+**V1.0.2 baseline: COMPLETE and FROZEN — 2026-10-03; final read-only review: PASS.** The untagged V1.0.3 AI-assist candidate on `main` failed live AgentRouter verification and remains disabled because `AGENTROUTER_API_KEY` was removed from Render. This focused audit hardening is a separate V1 patch; no tag or release decision is made until its production migration/deploy check passes. Production remains https://igetjobs.vercel.app and https://igetjobs-api.onrender.com.
+
+## V1 audit-failure/manual-review hardening — production gate pending (2026-10-04)
+
+Focused V1 change only. Deterministic final classifications and score policy are unchanged; no V2 work.
+
+- Added dedicated persisted `audit_attempt_status`, `audit_attempt_reason`, `audit_attempted_at`, and bounded `audit_attempt_detail` fields in migration `202610040008_audit_manual_review.sql`. Existing assessments backfill to `COMPLETED`; untouched leads remain `NOT_AUDITED`. The existing RLS policies remain in force; the owner-scoped security-invoker snapshot exposes only compact status/reason/time fields.
+- Bounded/unverified outcomes persist as `NEEDS_MANUAL_REVIEW` without HTML or stack traces. Supported reasons: HTML_TOO_LARGE, TEXT_TOO_LARGE, DOM_TOO_MANY_NODES, DOM_TOO_DEEP, ANALYSIS_TIMEOUT, UNSUPPORTED_CONTENT, ACCESS_RESTRICTED, and OTHER_UNVERIFIED. Safe measurements/limits and an HTTP status may be recorded. Existing HTML/content/DOM/worker/time/resource bounds and deterministic classifications are unchanged.
+- A manual-review retry leaves a prior valid audit/classification/score intact and clearly marks it as a previous completed assessment in Lead Detail. With no previous successful assessment, assessment fields stay null. Later successful retry changes the attempt to `COMPLETED`; edits to assessment inputs atomically clear both attempt and assessment data. Notes, mockup flag and pipeline status remain available without modifying scoring evidence.
+- Leads now have a distinct Audit status filter and a compact Manual review row marker/reason. Classification remains limited to the three final classifications plus Not audited; its Not audited option excludes leads with manual-review attempts.
+- Local verification after implementation: 107/107 tests, lint, typecheck, standard production build, and secret scan pass. Secret scan checked 130 publishable files, Git history and 13 built frontend outputs. The existing ~501KB vendor chunk warning remains.
+- The owner reports migration `202610040008_audit_manual_review.sql` applied on 2026-10-04; remote schema access is not yet independently verified. The code has not yet been deployed, and the named Midtown Dental live audit check remains pending. Do not claim production verification or release completion until the deployed service reads the new fields, a known/disposable lead is audited, and it appears in the separate status filter. No unrelated lead is to be modified or removed.
+- Repository tags stop at `v1.0.2`; no `v1.0.3` tag exists. The failed AI candidate remains untagged. After production verification, decide whether this hardening can safely be released as `v1.0.3` without tagging/moving the AI candidate's tag.
+
+Stop before V2.
 
 ## V1.0.3 AgentRouter assist — implementation complete; release NEEDS FIXES (2026-10-03)
 
