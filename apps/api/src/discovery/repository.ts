@@ -8,6 +8,8 @@ export function leadToRow(lead: Lead, ownerId: string) {
 }
 export function leadFromRow(row: Record<string, unknown>): Lead {
   const lead = Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'owner_id').map(([key, value]) => [key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase()), value])) as unknown as Lead;
+  // Rows created before the manual flag was introduced remain safe to read.
+  if (typeof lead.mockupCandidate !== 'boolean') lead.mockupCandidate = false;
   // Backward compatibility for snapshots/fixtures created before the attempt fields.
   if (!lead.auditAttemptStatus) {
     const completed = Boolean(lead.audit && lead.classification && lead.score != null);

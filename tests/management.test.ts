@@ -10,6 +10,7 @@ import { defaultScoring } from '../apps/api/src/audit/policy.js';
 import { auditLead } from '../apps/api/src/audit/engine.js';
 import { CsvAdapter } from '../apps/api/src/discovery/adapters/csv.js';
 import { discoveryOptions, validateQuery } from '../apps/api/src/discovery/config.js';
+import { leadFromRow, leadToRow } from '../apps/api/src/discovery/repository.js';
 
 const fixture = (name = 'Clinic'): Lead => normalizeLead({ businessName: name, country: 'GB', city: 'London', niche: 'Dentists', email: 'public@clinic.com', phone: '+442079460958', sourceId: name, metadata: {} }, 'CSV').lead;
 const invalid = (error: unknown) => error instanceof RequestError && error.status === 400;
@@ -59,6 +60,10 @@ test('management edits whitelist fields, preserve unchanged assessments, and inv
   const notes = managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, status: 'Qualified', notes: 'Discuss next steps', followUpAt: '2026-10-02T12:00:00.000Z' });
   assert.deepEqual(notes, { status: 'Qualified', notes: 'Discuss next steps', follow_up_at: '2026-10-02T12:00:00.000Z' });
   assert.deepEqual(managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, status: 'New' }), {});
+  assert.equal(lead.mockupCandidate, false);
+  assert.deepEqual(managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, mockupCandidate: true }), { mockup_candidate: true });
+  assert.equal(lead.audit !== null, true, 'manual flag does not alter the assessment');
+  assert.throws(() => managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, mockupCandidate: 'true' }), invalid);
   for (const [key, value] of Object.entries({ businessName: 'Changed', niche: 'Gyms', country: 'US', city: 'Boston', address: '123 Street', website: '//clinic.com/?access_token=fixture', email: 'new@clinic.com', phone: '+442079460959', rating: 4.5, reviewCount: 8 })) {
     const changes = managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, [key]: value });
     assert.equal(changes.audit, null, key); assert.equal(changes.classification, null); assert.equal(changes.score, null); assert.deepEqual(changes.score_reasons, []);
@@ -67,6 +72,13 @@ test('management edits whitelist fields, preserve unchanged assessments, and inv
   }
   assert.throws(() => managementChanges(lead, { expectedUpdatedAt: '2020-01-01T00:00:00Z', notes: 'Stale' }), conflict);
   for (const input of [{ score: 100 }, { ownerId: 'B' }, { activity: [] }, { provenance: [] }, { status: 'Won' }, { notes: null }, { notes: 'x'.repeat(10001) }, { followUpAt: 'not-a-date' }, { followUpAt: '2026-02-31T12:00:00Z' }, { website: { url: 'clinic.com' } }, { website: 'javascript:alert(1)' }, { phone: 'garbage' }, { rating: '4' }, { reviewCount: 1.2 }]) assert.throws(() => managementChanges(lead, { expectedUpdatedAt: lead.updatedAt, ...input }), invalid);
+});
+
+test('manual mockup flag persists through database row mapping and legacy rows default false', () => {
+  const lead = fixture();
+  assert.equal((leadToRow(lead, 'owner-A') as Record<string, unknown>).mockup_candidate, false);
+  assert.equal(leadFromRow({ mockup_candidate: true }).mockupCandidate, true);
+  assert.equal(leadFromRow({}).mockupCandidate, false);
 });
 
 test('service paginates the complete owner collection, isolates users and rejects stale edits', async () => {

@@ -32,11 +32,3 @@ services:
         sync: false
       - key: GEOAPIFY_DAILY_LIMIT
         value: "100"
-      - key: AGENTROUTER_BASE_URL
-        value: https://agentrouter.org/v1
-      - key: AGENTROUTER_MODEL
-        value: deepseek-v4-flash
-      - key: AGENTROUTER_API_KEY
-        sync: false
-      - key: AGENTROUTER_DAILY_LIMIT
-        value: "35"

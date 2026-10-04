@@ -29,7 +29,7 @@ The app helps collect leads, audit them, score them, draft outreach, and track s
 - Supabase for auth + database.
 - Free tiers only.
 - No paid dependency required for the MVP.
-- No AI-based discovery, audit, scoring or automatic outreach in V1. The owner-approved v1.0.3 exception allows only explicit AgentRouter wording suggestions with deterministic data remaining authoritative and manual review required.
+- No AI integration in V1.
 - No AI voice calling in V1.
 - No automatic outreach sending in V1.
 - No automatic cold calling.

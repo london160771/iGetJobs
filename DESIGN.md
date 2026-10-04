@@ -40,9 +40,6 @@ Sidebar:
 
 ## Key screen behavior
 
-### Optional V1.0.3 AI assist
-Keep AI actions in Lead Detail and its outreach editor, away from discovery cards. Label generated wording as a suggestion; never present it as an audit result or silently replace a draft. The mockup-candidate flag is a manual checkbox in management. The deterministic draft and assessment remain visible and usable when AI is unavailable.
-
 ### Login
 - centered auth form
 - email/password

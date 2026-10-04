@@ -3,13 +3,13 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { RequestError } from './errors.js';
 export type Usage = Record<string, { period: string; count: number; lastCall: number }>;
-export type QuotaProvider = 'OSM' | 'SERPAPI' | 'HUNTER' | 'GEOAPIFY' | 'AGENTROUTER';
+export type QuotaProvider = 'OSM' | 'SERPAPI' | 'HUNTER' | 'GEOAPIFY';
 export interface UsageStore { load(): Promise<Usage>; save(usage: Usage): Promise<void>; reserve?(provider: QuotaProvider, limit: number): Promise<void> }
 export async function reserveUsage(store: UsageStore, source: QuotaProvider, limit: number, now: number) {
   if (store.reserve) return store.reserve(source,limit);
   const usage = await store.load(), previous = usage[source];
-  const period = new Date(now).toISOString().slice(0,['OSM','GEOAPIFY','AGENTROUTER'].includes(source) ? 10 : 7);
-  if (previous && now - previous.lastCall < (source === 'OSM' ? 15000 : source === 'AGENTROUTER' ? 0 : 5000)) throw new RequestError(429,'Please wait before another provider lookup.');
+  const period = new Date(now).toISOString().slice(0,['OSM','GEOAPIFY'].includes(source) ? 10 : 7);
+  if (previous && now - previous.lastCall < (source === 'OSM' ? 15000 : 5000)) throw new RequestError(429,'Please wait before another provider lookup.');
   const count = previous?.period === period ? previous.count : 0;
   if (count >= limit) throw new RequestError(429,'The configured provider attempt cap is exhausted.');
   usage[source] = { period,count:count + 1,lastCall:now };

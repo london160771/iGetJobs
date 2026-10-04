@@ -154,7 +154,7 @@ export interface Lead extends LeadProvenance {
   scoreReasons: ScoreReason[];
   outreachDraft: OutreachDraft | null;
   contactEnrichment?: ContactEnrichment | null;
-  /** Manual visual-concept candidate flag; AI suggestions never set this. */
+  /** User-controlled reminder that a future visual concept may be useful. */
   mockupCandidate: boolean;
   status: LeadStatus;
   notes: string;

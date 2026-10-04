@@ -9,7 +9,6 @@ import { createManagementService } from './management.js';
 import { createOutreachService } from './outreach/service.js';
 import { prepareProduction } from './production.js';
 import { approvedProviderUsers } from './provider-access.js';
-import { createAiService } from './ai/service.js';
 
 // Resolve relative to this file so dev and built starts load the same API-only env.
 config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)), quiet: true });
@@ -17,7 +16,7 @@ config({ path: fileURLToPath(new URL('../.env', import.meta.url)), quiet: true }
 const env = readServerEnv(process.env);
 await prepareProduction(process.env);
 const frontend = process.env.SERVE_WEB === 'true' ? { directory: fileURLToPath(new URL('../../web/dist/', import.meta.url)), supabaseUrl: env.supabaseUrl } : undefined;
-const app = createApp(createServerSupabase(env), createDiscoveryService(process.env), createAuditService(process.env), createManagementService(process.env), createOutreachService(process.env), frontend, approvedProviderUsers(process.env), createAiService(process.env));
+const app = createApp(createServerSupabase(env), createDiscoveryService(process.env), createAuditService(process.env), createManagementService(process.env), createOutreachService(process.env), frontend, approvedProviderUsers(process.env));
 const server = app.listen(env.port, env.host, () => {
   console.log(`iGetJobs API listening at http://${env.host}:${env.port}`);
 });

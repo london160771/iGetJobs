@@ -12,8 +12,6 @@ At the end of each phase:
 6. push to GitHub and confirm the commit hash and push status
 7. stop for review before the next phase
 
-Post-freeze v1.0.3 is a user-approved, narrowly scoped AI-assist exception: explicit AgentRouter suggestions and a manual candidate flag only. It does not begin V2 or alter Phase 2 deterministic audit/scoring.
-
 ## Phase 0 — Project foundation
 Goal: establish a clean runnable base.
 

@@ -11,9 +11,8 @@ import { managementRoutes, type ManagementService } from './management.js';
 import { outreachRoutes, type OutreachService } from './outreach/service.js';
 import { serveFrontend } from './frontend.js';
 import { requireProviderAccess } from './provider-access.js';
-import { aiRoutes, type AiService } from './ai/service.js';
 
-export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }, approvedUsers: ReadonlySet<string> = new Set(), ai?: AiService) {
+export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }, approvedUsers: ReadonlySet<string> = new Set()) {
   const app = express();
   const providerAccess = requireProviderAccess(approvedUsers);
   app.disable('x-powered-by');
@@ -46,7 +45,6 @@ export function createApp(supabase: SupabaseClient | null, discovery?: Discovery
   app.use('/api/leads', requireAuth(supabase), auditRoutes(audit));
   app.use('/api/management', requireAuth(supabase), managementRoutes(management));
   app.use('/api/outreach', requireAuth(supabase), outreachRoutes(outreach, providerAccess));
-  app.use('/api/ai', requireAuth(supabase), aiRoutes(ai, providerAccess));
   if (frontend) serveFrontend(app, frontend.directory, frontend.supabaseUrl);
   app.use((_req, res) => {
     const body: ApiError = { error: 'Route not found.' };
