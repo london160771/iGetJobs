@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { quotaStore, type QuotaRpc } from '../apps/api/src/quota.js';
+import { createSupabaseKeepalive, quotaStore, type QuotaRpc } from '../apps/api/src/quota.js';
 import { ProviderGuard } from '../apps/api/src/discovery/usage.js';
 import { HunterAdapter } from '../apps/api/src/outreach/hunter.js';
 import { RequestError } from '../apps/api/src/discovery/errors.js';
@@ -118,4 +118,26 @@ test('quota status still rejects unknown provider names and malformed active or 
     const store = quotaStore({ rpc:async () => ({ data,error:null }) });
     await assert.rejects(store.load(),error => error instanceof RequestError && error.status === 503);
   }
+});
+
+test('Supabase keepalive calls only the read-only quota status RPC and discards all provider data', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    requests.push(`${init?.method || 'GET'} ${new URL(url).pathname}`);
+    return new Response(JSON.stringify({
+      GEOAPIFY:{ period:'2026-10-09',count:4,lastCall:1000 },
+      AGENTROUTER:{ period:'2026-10-03',count:6,lastCall:2000 }
+    }), { headers:{ 'Content-Type':'application/json' } });
+  };
+  try {
+    const keepalive = createSupabaseKeepalive({
+      SUPABASE_URL:'https://fixture.supabase.co',
+      SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture',
+      SUPABASE_QUOTA_SERVICE_KEY:'sb_secret_fixture'
+    });
+    assert.equal(await keepalive(), undefined);
+    assert.deepEqual(requests, ['POST /rest/v1/rpc/provider_usage_status']);
+  } finally { globalThis.fetch = originalFetch; }
 });

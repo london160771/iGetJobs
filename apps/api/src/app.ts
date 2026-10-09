@@ -12,7 +12,7 @@ import { outreachRoutes, type OutreachService } from './outreach/service.js';
 import { serveFrontend } from './frontend.js';
 import { requireProviderAccess } from './provider-access.js';
 
-export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }, approvedUsers: ReadonlySet<string> = new Set()) {
+export function createApp(supabase: SupabaseClient | null, discovery?: DiscoveryService, audit?: AuditService, management?: ManagementService, outreach?: OutreachService, frontend?: { directory: string; supabaseUrl: string | null }, approvedUsers: ReadonlySet<string> = new Set(), keepalive?: () => Promise<void>) {
   const app = express();
   const providerAccess = requireProviderAccess(approvedUsers);
   app.disable('x-powered-by');
@@ -30,6 +30,15 @@ export function createApp(supabase: SupabaseClient | null, discovery?: Discovery
       status: 'ok', service: 'igetjobs-api', supabase: supabase ? 'configured' : 'unconfigured'
     };
     res.json(health);
+  });
+  app.get('/api/keepalive', async (_req, res) => {
+    try {
+      if (!keepalive) throw new Error('Keepalive is not configured.');
+      await keepalive();
+      res.json({ status: 'ok', database: 'reachable' });
+    } catch {
+      res.status(503).json({ status: 'error', database: 'unreachable' });
+    }
   });
   app.get('/api/session', requireAuth(supabase), (_req, res) => {
     res.json({ userId: res.locals.userId });

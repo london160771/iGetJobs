@@ -1,5 +1,10 @@
 # iGetJobs — PROJECT_STATE.md
 
+## Public Supabase keepalive endpoint — 2026-10-09
+
+- Added `GET /api/keepalive` for an external scheduler. It uses the existing server-only `SUPABASE_QUOTA_SERVICE_KEY` connection to call the read-only `provider_usage_status` RPC, then discards the result.
+- It returns only `{ "status": "ok", "database": "reachable" }` on success or HTTP 503 with `{ "status": "error", "database": "unreachable" }` on failure. The endpoint never reads owner-protected lead data, changes quota counters, or changes RLS.
+
 ## Current status
 
 **V1.0.4 quota-startup hotfix — production verification PASS (2026-10-04).** This focused change accepts `AGENTROUTER` only as inert historical quota data, removes the startup dependency on the quota-status RPC, and preserves atomic fail-closed reservations for active providers. No AgentRouter runtime or V2 work.

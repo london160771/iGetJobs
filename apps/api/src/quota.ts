@@ -42,3 +42,12 @@ export function supabaseUsageStore(env: NodeJS.ProcessEnv): UsageStore {
     global:{ fetch:(input,init) => fetch(input,{ ...init,signal:AbortSignal.timeout(15000) }) }
   }));
 }
+
+/** Read-only database heartbeat using the server-only quota RPC connection. */
+export function createSupabaseKeepalive(env: NodeJS.ProcessEnv): () => Promise<void> {
+  let store: UsageStore | undefined;
+  return async () => {
+    store ??= supabaseUsageStore(env);
+    await store.load(); // provider_usage_status is read-only; discard its data.
+  };
+}

@@ -138,3 +138,36 @@ test('API health is honest; unknown routes, malformed and oversized JSON fail sa
     }
   }
 });
+
+test('public keepalive returns fixed success/error bodies and never exposes database or provider details', async () => {
+  let calls = 0;
+  const healthyServer = createApp(null, undefined, undefined, undefined, undefined, undefined, undefined, async () => { calls++; })
+    .listen(0, '127.0.0.1');
+  await once(healthyServer, 'listening');
+  try {
+    const address = healthyServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const response = await fetch('http://127.0.0.1:' + address.port + '/api/keepalive');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: 'ok', database: 'reachable' });
+    assert.equal(calls, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => healthyServer.close(error => error ? reject(error) : resolve()));
+  }
+
+  const unavailableServer = createApp(null, undefined, undefined, undefined, undefined, undefined, undefined, async () => {
+    throw new Error('private provider usage details and secret fixture');
+  }).listen(0, '127.0.0.1');
+  await once(unavailableServer, 'listening');
+  try {
+    const address = unavailableServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const response = await fetch('http://127.0.0.1:' + address.port + '/api/keepalive');
+    const body = await response.text();
+    assert.equal(response.status, 503);
+    assert.equal(body, JSON.stringify({ status: 'error', database: 'unreachable' }));
+    assert.doesNotMatch(body, /provider|secret|fixture/i);
+  } finally {
+    await new Promise<void>((resolve, reject) => unavailableServer.close(error => error ? reject(error) : resolve()));
+  }
+});
