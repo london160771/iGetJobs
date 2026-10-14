@@ -249,6 +249,10 @@ No paid disk or extra database is required. Render's free filesystem is ephemera
 
 V1 is currently used privately for personal use. By the owner's explicit decision, Vercel Hobby remains the current frontend host and hosting is not a blocker for this personal-use release. Review [Hobby eligibility](https://vercel.com/docs/plans/hobby) and hosting-plan requirements before commercial or wider public use. This pass does not move hosting or introduce paid services.
 
+### Automatic Supabase keepalive
+
+The GitHub Actions workflow `.github/workflows/supabase-keepalive.yml` calls `https://igetjobs-api.onrender.com/api/keepalive` every six hours and can also be run with **Actions → Supabase keepalive → Run workflow**. It requires no GitHub secret or variable: the URL is a public production address, and the endpoint returns only a fixed reachability result. Each run requires HTTP 200 plus `{ "status": "ok", "database": "reachable" }`; it makes at most three attempts, with a 30-second connection timeout, 150-second request timeout per attempt, and a 15-second delay. The longer request bound allows Render's free service to wake from sleep. If the Render hostname changes, update the workflow URL. The endpoint calls the read-only `provider_usage_status()` Supabase RPC using Render's private `SUPABASE_QUOTA_SERVICE_KEY`; that RPC queries provider-usage rows without reserving quota or reading lead data. Supabase credentials stay on Render, never in GitHub Actions or Vercel.
+
 ### Manual setup before deployment
 
 1. **Supabase SQL Editor:** apply `supabase/migrations/202610020005_provider_usage.sql` once. The earlier four migrations are already applied. Global `provider_usage` has forced RLS and no public/user table grants. Only `service_role` can execute the two quota RPCs. They cannot touch leads/settings, reset counts, accept a caller-supplied clock/period or change ownership. Reservations lock the provider row, then check UTC period/cooldown/cap before consuming allowance.

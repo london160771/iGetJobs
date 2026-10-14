@@ -1,0 +1,54 @@
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Confirm production Supabase activity
+        shell: bash
+        env:
+          KEEPALIVE_URL: https://igetjobs-api.onrender.com/api/keepalive
+        run: |
+          set -u
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+
+          for attempt in 1 2 3; do
+            : > "$response_file"
+            http_status="$(curl --silent --output "$response_file" --write-out '%{http_code}' \
+              --connect-timeout 30 --max-time 150 \
+              --user-agent 'iGetJobs-Supabase-Keepalive/1.0' \
+              "$KEEPALIVE_URL" 2>/dev/null || true)"
+
+            if [[ "$http_status" == "200" ]] && jq --exit-status \
+              '.status == "ok" and .database == "reachable"' "$response_file" >/dev/null 2>&1; then
+              echo "Keepalive succeeded: production Supabase database reachable (HTTP 200)."
+              exit 0
+            fi
+
+            if [[ "$http_status" =~ ^4[0-9][0-9]$ ]]; then
+              echo "Keepalive failed with a non-retryable HTTP ${http_status}."
+              exit 1
+            fi
+
+            if [[ -z "$http_status" || "$http_status" == "000" ]]; then
+              echo "Attempt ${attempt}/3 received no HTTP response."
+            else
+              echo "Attempt ${attempt}/3 did not confirm database reachability (HTTP ${http_status})."
+            fi
+
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep 15
+            fi
+          done
+
+          echo "Keepalive failed after 3 bounded attempts."
+          exit 1
